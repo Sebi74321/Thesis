@@ -22,11 +22,17 @@ class CTABGAN():
                  general_columns = ["age"],
                  non_categorical_columns = [],
                  integer_columns = ['age', 'fnlwgt','capital-gain', 'capital-loss','hours-per-week'],
-                 problem_type= {"Classification": "income"}):
+                 problem_type= {"Classification": "income"},
+                 class_dim=(256, 256, 256, 256),
+                 random_dim=100,
+                 num_channels=64,
+                 l2scale=1e-5,
+                 batch_size=500,
+                 epochs=150):
 
         self.__name__ = 'CTABGAN'
               
-        self.synthesizer = CTABGANSynthesizer()
+        self.synthesizer = CTABGANSynthesizer(class_dim, random_dim, num_channels, 12scale, batch_size, epochs)
         self.raw_df = pd.read_csv(raw_csv_path)
         self.test_ratio = test_ratio
         self.categorical_columns = categorical_columns
