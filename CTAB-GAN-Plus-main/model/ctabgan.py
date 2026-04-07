@@ -32,7 +32,7 @@ class CTABGAN():
 
         self.__name__ = 'CTABGAN'
               
-        self.synthesizer = CTABGANSynthesizer(class_dim, random_dim, num_channels, 12scale, batch_size, epochs)
+        self.synthesizer = CTABGANSynthesizer(class_dim, random_dim, num_channels, l2scale, batch_size, epochs)
         self.raw_df = pd.read_csv(raw_csv_path)
         self.test_ratio = test_ratio
         self.categorical_columns = categorical_columns
