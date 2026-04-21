@@ -27,7 +27,6 @@ class CDFTailMetrics:
     label_col: str = "Class"
     tau: float = 0.9
     grid_size: int = 200
-    feature_cols: Optional[List[str]] = None  # if None, uses all non-label cols
 
     def _tail_divergence_1d(self, real_col: np.ndarray, syn_col: np.ndarray) -> float:
         real_col = np.asarray(real_col)
@@ -53,14 +52,12 @@ class CDFTailMetrics:
         # align cols
         syn_df = syn_df[real_df.columns]
 
-        cols = self.feature_cols
-        if cols is None:
-            cols = [c for c in real_df.columns if c != self.label_col]
 
+        numeric_cols = real_df.select_dtypes(include=[np.number]).columns
         divergences = []
         out: Dict[str, float] = {}
 
-        for col in cols:
+        for col in numeric_cols:
             d = self._tail_divergence_1d(real_df[col].values, syn_df[col].values)
             out[f"cdf_tail_div_{col}"] = d
             divergences.append(d)
