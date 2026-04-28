@@ -66,7 +66,7 @@ class SupportCoverage:
     label_col: str = "Class"
     n_bins: int = 5
     rare_threshold: float = 0.05
-    min_rare_count = 3
+    min_rare_count = 0
 
 
     # k-way settings
@@ -172,9 +172,9 @@ class SupportCoverage:
                 "num_syn_combos": len(set(syn_combos)),
             }
 
-        real_freq = pd.Series(real_combos).value_counts(normalize=True)
+        real_counts = pd.Series(real_combos).value_counts()
         real_freq = real_counts / len(real_combos)
-        rare_real = set(set(real_counts[(real_counts >= self.min_rare_count) &(real_freq <= self.rare_threshold)].index)
+        rare_real = set(real_counts[(real_counts >= self.min_rare_count) &(real_freq <= self.rare_threshold)].index)
         syn_support = set(syn_combos)
 
         if len(rare_real) == 0:
@@ -232,18 +232,18 @@ class SupportCoverage:
         return {
             "support_coverage": mean_sc,
             "support_coverage_std": std_sc,
-            "k": int(self.k),
+            #"k": int(self.k),
             "num_subsets_evaluated": int(len(subsets)),
             "num_valid_subsets": int(len(subset_scores)),
             "avg_num_rare_combos": float(np.mean(rare_counts)) if rare_counts else float("nan"),
             "avg_num_covered_rare_combos": float(np.mean(covered_counts)) if covered_counts else float("nan"),
             "avg_num_real_combos": float(np.mean(real_combo_counts)) if real_combo_counts else float("nan"),
             "avg_num_syn_combos": float(np.mean(syn_combo_counts)) if syn_combo_counts else float("nan"),
-            "rare_threshold": float(self.rare_threshold),
-            "min_rare_count" : float(self.min_rare_count),
-            "n_bins": int(self.n_bins),
-            "include_label": float(self.include_label_in_combo),
-            "max_subsets": -1 if self.max_subsets is None else int(self.max_subsets),
+            #"rare_threshold": float(self.rare_threshold),
+            #"min_rare_count" : float(self.min_rare_count),
+            #"n_bins": int(self.n_bins),
+            #"include_label": float(self.include_label_in_combo),
+            #"max_subsets": -1 if self.max_subsets is None else int(self.max_subsets),
         }
 
     def evaluate_paths(self, real_path: str, syn_path: str) -> Dict[str, float]:
