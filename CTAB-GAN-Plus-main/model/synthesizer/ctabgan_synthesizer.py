@@ -346,7 +346,8 @@ class CTABGANSynthesizer:
                  num_channels=64,
                  l2scale=1e-5,
                  batch_size=500,
-                 epochs=150):
+                 epochs=150,
+                snapshot_frq=25):
                  
 
         self.random_dim = random_dim
@@ -418,6 +419,8 @@ class CTABGANSynthesizer:
         epoch = 0
         steps = 0
         ci = 5
+
+        discriminator_snap = []
         
         steps_per_epoch = max(1, len(train_data) // self.batch_size)
         for i in tqdm(range(self.epochs)):
@@ -545,6 +548,12 @@ class CTABGANSynthesizer:
                     optimizerC.step()
                                 
             epoch += 1
+            if epoch%snapshot_frq == 0
+                discriminator_snap.append(discriminator)
+
+        return discriminator_snap
+                
+                    
 
             
    
