@@ -10,6 +10,7 @@ Conv2d, ConvTranspose2d, Sigmoid, init, BCELoss, CrossEntropyLoss,SmoothL1Loss,L
 from model.synthesizer.transformer import ImageTransformer,DataTransformer
 from model.privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
 from tqdm import tqdm
+import copy
 
 
 class Classifier(Module):
