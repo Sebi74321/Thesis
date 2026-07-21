@@ -21,6 +21,11 @@ GAN fits show epoch progress with elapsed time and ETA. In non-interactive
 cluster logs, `--progress auto` writes periodic progress lines instead. Use
 `--progress on` to force a bar or `--progress off` to disable progress output.
 
+For JupyterLab, open
+`CTAB-GAN-Plus-main/notebooks/xai_retraining_orchestrator.ipynb`. It performs
+GPU/data preflight checks, launches or resumes the CLI, and displays the saved
+ablation tables, deltas, feature priorities, row weights, and diagnostic plots.
+
 Use `--device cuda` inside a one-GPU H100 job. `run_h100.slurm` is an example
 SLURM submission. Validation configs use `frozen=false`; after selecting the
 final settings, copy the config, set `frozen=true`, and run it once with
