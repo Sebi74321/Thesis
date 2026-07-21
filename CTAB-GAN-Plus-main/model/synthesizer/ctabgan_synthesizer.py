@@ -348,7 +348,8 @@ class CTABGANSynthesizer:
                  l2scale=1e-5,
                  batch_size=500,
                  epochs=150,
-                snapshot_frq=25):
+                 snapshot_frq=25,
+                 device=None):
                  
 
         self.random_dim = random_dim
@@ -359,7 +360,9 @@ class CTABGANSynthesizer:
         self.l2scale = l2scale
         self.batch_size = batch_size
         self.epochs = epochs
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            device if device is not None else ("cuda:0" if torch.cuda.is_available() else "cpu")
+        )
         self.snapshot_frq = snapshot_frq
 
     def fit(self, train_data=pd.DataFrame, categorical=[], mixed={}, general=[], non_categorical=[], type={}):
@@ -551,10 +554,13 @@ class CTABGANSynthesizer:
                     optimizerC.step()
                                 
             epoch += 1
-            if epoch % self.snapshot_frq == 0:
+            if self.snapshot_frq and epoch % self.snapshot_frq == 0:
                 snapshot = {
                     "epoch": epoch,
-                    "state_dict": copy.deepcopy(discriminator.state_dict())
+                    "state_dict": {
+                        key: value.detach().cpu().clone()
+                        for key, value in discriminator.state_dict().items()
+                    }
                 }
             
                 discriminator_snap.append(snapshot)

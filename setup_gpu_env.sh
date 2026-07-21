@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMP_ROOT="/workspace/tmp_micromamba"
 ENV_NAME="thesis310"
 ENV_PREFIX="$TEMP_ROOT/root/envs/$ENV_NAME"
@@ -25,16 +26,7 @@ PIP="$ENV_PREFIX/bin/pip"
 
 "$PY" -m pip install --upgrade pip setuptools wheel
 
-"$PIP" install \
-  numpy==1.26.4 \
-  pandas \
-  scipy \
-  scikit-learn \
-  dython \
-  shap \
-  tqdm \
-  matplotlib \
-  seaborn
+"$PIP" install -r "$REPO_ROOT/requirements-base.txt"
 
 "$PIP" install \
   torch==2.7.0 \
@@ -71,7 +63,7 @@ cat > "$KERNEL_DIR/kernel.json" <<EOF
 }
 EOF
 
-cat > /workspace/persistent/thesis/activate_thesis310.sh <<EOF
+cat > "$REPO_ROOT/activate_thesis310.sh" <<EOF
 #!/usr/bin/env bash
 
 unset PYTHONPATH
@@ -84,7 +76,7 @@ export PATH="\$CONDA_PREFIX/bin:\$PATH"
 export LD_LIBRARY_PATH="\$CONDA_PREFIX/lib:\$CONDA_PREFIX/lib/python3.10/site-packages/torch/lib"
 EOF
 
-chmod +x /workspace/persistent/thesis/activate_thesis310.sh
+chmod +x "$REPO_ROOT/activate_thesis310.sh"
 
 LD_LIBRARY_PATH="$ENV_PREFIX/lib:$ENV_PREFIX/lib/python3.10/site-packages/torch/lib" "$PY" - <<'PY'
 import torch, numpy

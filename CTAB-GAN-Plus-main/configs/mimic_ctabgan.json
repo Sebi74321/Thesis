@@ -1,0 +1,122 @@
+{
+  "data_path": "Real_Datasets/MimicIV_clean.csv",
+  "results_dir": "results",
+  "target_col": "hospital_expire_flag",
+  "categorical_cols": [
+    "gender",
+    "hospital_expire_flag"
+  ],
+  "continuous_cols": [
+    "age_at_intime",
+    "heart_rate_min",
+    "heart_rate_max",
+    "heart_rate_mean",
+    "sbp_min",
+    "sbp_max",
+    "sbp_mean",
+    "dbp_min",
+    "dbp_max",
+    "dbp_mean",
+    "resp_rate_min",
+    "resp_rate_max",
+    "resp_rate_mean",
+    "temperature_min",
+    "temperature_max",
+    "temperature_mean",
+    "spo2_min",
+    "spo2_max",
+    "spo2_mean",
+    "creatinine_min",
+    "creatinine_max",
+    "sodium_min",
+    "sodium_max",
+    "potassium_min",
+    "potassium_max",
+    "hemoglobin_min",
+    "hemoglobin_max",
+    "wbc_min",
+    "wbc_max"
+  ],
+  "seed": 42,
+  "frozen": false,
+  "deterministic": true,
+  "allow_tf32": false,
+  "n_jobs": -1,
+  "split": {
+    "train_fraction": 0.6,
+    "audit_fraction": 0.2,
+    "val_fraction": 0.1,
+    "test_fraction": 0.1
+  },
+  "weighting": {
+    "alpha": 1.0,
+    "gamma": 0.25,
+    "top_k": 5,
+    "w_max": 2.0
+  },
+  "detector": {
+    "n_estimators": 300,
+    "shap_max_rows": 2000
+  },
+  "evaluation": {
+    "n_estimators": 300
+  },
+  "generator": {
+    "categorical_columns": [
+      "gender",
+      "hospital_expire_flag"
+    ],
+    "log_columns": [],
+    "mixed_columns": {},
+    "general_columns": [
+      "heart_rate_min",
+      "heart_rate_max",
+      "heart_rate_mean",
+      "sbp_min",
+      "sbp_max",
+      "sbp_mean",
+      "dbp_min",
+      "dbp_max",
+      "dbp_mean",
+      "resp_rate_min",
+      "resp_rate_max",
+      "resp_rate_mean",
+      "temperature_min",
+      "temperature_max",
+      "temperature_mean",
+      "spo2_min",
+      "spo2_max",
+      "spo2_mean",
+      "creatinine_min",
+      "creatinine_max",
+      "sodium_min",
+      "sodium_max",
+      "potassium_min",
+      "potassium_max",
+      "hemoglobin_min",
+      "hemoglobin_max",
+      "wbc_min",
+      "wbc_max"
+    ],
+    "non_categorical_columns": [],
+    "integer_columns": [
+      "age_at_intime"
+    ],
+    "problem_type": {
+      "Classification": "hospital_expire_flag"
+    },
+    "class_dim": [
+      256,
+      256
+    ],
+    "random_dim": 100,
+    "num_channels": 64,
+    "l2scale": 0.00001,
+    "batch_size": 512,
+    "epochs": 150,
+    "snapshot_frq": null
+  },
+  "smoke_rows": 500,
+  "smoke_epochs": 1,
+  "smoke_batch_size": 64
+}

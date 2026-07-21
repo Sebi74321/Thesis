@@ -1,0 +1,6 @@
+**/__pycache__/
+*.py[cod]
+.deps/
+.venv*/
+logs/
+CTAB-GAN-Plus-main/results/
