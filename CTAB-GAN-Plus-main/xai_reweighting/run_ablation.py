@@ -57,7 +57,7 @@ def _fingerprint(config: Dict[str, Any], data_hash: str, code_hash: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _adapter(config, device, seed):
+def _adapter(config, device, seed, progress, progress_label):
     from .generator_adapters import CTABGANPlusAdapter
 
     generator = dict(config["generator"])
@@ -67,6 +67,8 @@ def _adapter(config, device, seed):
         seed=seed,
         deterministic=config.get("deterministic", True),
         allow_tf32=config.get("allow_tf32", False),
+        progress=progress,
+        progress_label=progress_label,
     )
 
 
@@ -110,8 +112,11 @@ def run_experiment(
     resume: bool = False,
     smoke: bool = False,
     adapter_factory=None,
+    progress: str = "auto",
 ) -> Path:
     variants = [v.upper() for v in variants]
+    if progress not in {"auto", "on", "off"}:
+        raise ValueError("progress must be auto, on, or off")
     invalid = sorted(set(variants) - set(VALID_VARIANTS))
     if invalid:
         raise ValueError(f"Unknown variants: {invalid}")
@@ -177,6 +182,7 @@ def run_experiment(
         "data_sha256": data_hash,
         "code_sha256": code_hash,
         "smoke": smoke,
+        "progress": progress,
         **runtime_manifest,
     }
     atomic_write_json(manifest_path, manifest)
@@ -198,7 +204,10 @@ def run_experiment(
     splits = create_data_splits(data, config["target_col"], seed=seed, **split_cfg)
     atomic_write_json(output_dir / "split_indices.json", splits.indices)
     real_eval = splits.val if stage == "val" else splits.test
-    make_adapter = adapter_factory or (lambda: _adapter(config, device, seed))
+    if adapter_factory is None:
+        make_adapter = lambda label: _adapter(config, device, seed, progress, label)
+    else:
+        make_adapter = lambda label: adapter_factory()
 
     baseline_audit_path = output_dir / "baseline_synthetic_audit.csv"
     baseline_eval_path = output_dir / "synthetic_A0.csv"
@@ -207,7 +216,7 @@ def run_experiment(
         baseline_audit = pd.read_csv(baseline_audit_path)
         baseline_eval = pd.read_csv(baseline_eval_path)
     else:
-        baseline_model = make_adapter()
+        baseline_model = make_adapter("A0 GAN training")
         baseline_model.fit(splits.train)
         baseline_audit = baseline_model.sample(len(splits.audit))
         baseline_eval = baseline_model.sample(len(splits.train))
@@ -270,7 +279,7 @@ def run_experiment(
             retrain, selection_counts, diagnostics = _prepare_variant_data(
                 variant, splits.train, priorities, definitions, weighting, seed, output_dir
             )
-            model = make_adapter()
+            model = make_adapter(f"{variant} GAN training")
             model.fit(retrain)
             synthetic = model.sample(len(splits.train))
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
@@ -339,6 +348,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--variants", default=",".join(VALID_VARIANTS))
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--progress",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="GAN training progress: interactive bar, forced bar, or disabled",
+    )
     return parser
 
 
@@ -354,9 +369,10 @@ def main(argv=None) -> int:
         args.stage,
         args.device,
         [x.strip() for x in args.variants.split(",") if x.strip()],
-        args.output_dir,
-        args.resume,
-        args.smoke,
+        output_override=args.output_dir,
+        resume=args.resume,
+        smoke=args.smoke,
+        progress=args.progress,
     )
     print(output)
     return 0

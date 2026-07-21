@@ -9,8 +9,10 @@ from torch.nn import (Dropout, LeakyReLU, Linear, Module, ReLU, Sequential,
 Conv2d, ConvTranspose2d, Sigmoid, init, BCELoss, CrossEntropyLoss,SmoothL1Loss,LayerNorm)
 from model.synthesizer.transformer import ImageTransformer,DataTransformer
 from model.privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import copy
+import sys
+import time
 
 
 class Classifier(Module):
@@ -349,7 +351,9 @@ class CTABGANSynthesizer:
                  batch_size=500,
                  epochs=150,
                  snapshot_frq=25,
-                 device=None):
+                 device=None,
+                 progress='auto',
+                 progress_label='CTAB-GAN+'):
                  
 
         self.random_dim = random_dim
@@ -364,6 +368,10 @@ class CTABGANSynthesizer:
             device if device is not None else ("cuda:0" if torch.cuda.is_available() else "cpu")
         )
         self.snapshot_frq = snapshot_frq
+        if progress not in {'auto', 'on', 'off'}:
+            raise ValueError("progress must be 'auto', 'on', or 'off'")
+        self.progress = progress
+        self.progress_label = progress_label
 
     def fit(self, train_data=pd.DataFrame, categorical=[], mixed={}, general=[], non_categorical=[], type={}):
 
@@ -429,7 +437,25 @@ class CTABGANSynthesizer:
         discriminator_snap = []
         
         steps_per_epoch = max(1, len(train_data) // self.batch_size)
-        for i in tqdm(range(self.epochs)):
+        interactive_progress = self.progress == 'on' or (
+            self.progress == 'auto' and sys.stderr.isatty()
+        )
+        epoch_iterator = tqdm(
+            range(self.epochs),
+            desc=self.progress_label,
+            unit='epoch',
+            dynamic_ncols=True,
+            disable=not interactive_progress,
+        )
+        report_interval = max(1, self.epochs // 20)
+        progress_started = time.monotonic()
+        if self.progress != 'off' and not interactive_progress:
+            print(
+                f"{self.progress_label}: starting {self.epochs} epochs",
+                file=sys.stderr,
+                flush=True,
+            )
+        for i in epoch_iterator:
             for id_ in range(steps_per_epoch):
 				
                 
@@ -564,6 +590,21 @@ class CTABGANSynthesizer:
                 }
             
                 discriminator_snap.append(snapshot)
+
+            completed = i + 1
+            if (
+                self.progress != 'off'
+                and not interactive_progress
+                and (completed % report_interval == 0 or completed == self.epochs)
+            ):
+                elapsed = time.monotonic() - progress_started
+                eta = elapsed / completed * (self.epochs - completed)
+                print(
+                    f"{self.progress_label}: {completed}/{self.epochs} epochs "
+                    f"({completed / self.epochs:.0%}), elapsed={elapsed:.0f}s, eta={eta:.0f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
         return discriminator_snap
                 

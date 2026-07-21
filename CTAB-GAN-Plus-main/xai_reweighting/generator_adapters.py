@@ -49,6 +49,8 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         seed: int = 42,
         deterministic: bool = True,
         allow_tf32: bool = False,
+        progress: str = "auto",
+        progress_label: str = "CTAB-GAN+",
     ):
         self.categorical_columns = list(categorical_columns)
         self.log_columns = list(log_columns or [])
@@ -66,6 +68,8 @@ class CTABGANPlusAdapter(GeneratorAdapter):
             "epochs": epochs,
             "snapshot_frq": snapshot_frq,
             "device": str(device),
+            "progress": progress,
+            "progress_label": progress_label,
         }
         self.device = torch.device(device)
         self.seed = int(seed)

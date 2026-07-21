@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-from xai_reweighting.run_ablation import VALID_VARIANTS, run_experiment
+from xai_reweighting.run_ablation import VALID_VARIANTS, build_parser, run_experiment
 
 
 class FakeGenerator:
@@ -11,6 +11,14 @@ class FakeGenerator:
 
     def sample(self, n):
         return self.df.sample(n=n, replace=True, random_state=42).reset_index(drop=True)
+
+
+def test_progress_cli_modes():
+    parser = build_parser()
+    assert parser.parse_args(["--config", "config.json"]).progress == "auto"
+    assert parser.parse_args(
+        ["--config", "config.json", "--progress", "off"]
+    ).progress == "off"
 
 
 def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
