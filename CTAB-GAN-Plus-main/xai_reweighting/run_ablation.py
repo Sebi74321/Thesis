@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+import numpy as np
 import pandas as pd
 
 from .augmentation import create_uniform_augmentation, create_weighted_augmentation
@@ -89,9 +90,12 @@ def _prepare_variant_data(variant, train, priorities, definitions, weighting, se
         w_max=float(weighting["w_max"]),
     )
     diagnostics = weight_diagnostics(weights, float(weighting["w_max"]))
+    alpha = float(weighting["alpha"])
     diagnostics["warning_fraction_capped"] = diagnostics["fraction_capped"] > 0.10
-    diagnostics["warning_mean_outside_recommended_range"] = not (1.10 <= diagnostics["mean"] <= 1.30)
-    diagnostics["warning_median_far_from_one"] = diagnostics["50%"] > 1.25
+    diagnostics["warning_mean_outside_recommended_range"] = not (
+        1.0 + 0.10 * alpha <= diagnostics["mean"] <= 1.0 + 0.30 * alpha
+    )
+    diagnostics["warning_median_far_from_one"] = diagnostics["50%"] > 1.0 + 0.25 * alpha
     diagnostics["warning_nearly_uniform"] = diagnostics["std"] < 1e-6
     atomic_write_json(output_dir / f"row_weight_summary_{variant}.json", diagnostics)
     atomic_write_csv(
@@ -100,6 +104,79 @@ def _prepare_variant_data(variant, train, priorities, definitions, weighting, se
     )
     augmented, counts = create_weighted_augmentation(train, weights, gamma, seed)
     return augmented, counts, diagnostics
+
+
+def _training_diagnostics(history: pd.DataFrame) -> Dict[str, Any]:
+    if history.empty:
+        return {"status": "unavailable", "epochs_completed": 0}
+    loss_columns = [
+        column
+        for column in history.columns
+        if column not in {"epoch", "elapsed_seconds"} and history[column].notna().any()
+    ]
+    tail_rows = max(1, int(len(history) * 0.2))
+    diagnostics: Dict[str, Any] = {
+        "status": "no_instability_detected",
+        "epochs_completed": int(len(history)),
+        "tail_epochs": int(tail_rows),
+        "losses": {},
+    }
+    unstable_tail = False
+    extreme_loss = False
+    for column in loss_columns:
+        values = history[column].dropna().to_numpy(dtype=float)
+        tail = values[-tail_rows:]
+        x = np.arange(len(tail), dtype=float)
+        slope = float(np.polyfit(x, tail, 1)[0]) if len(tail) > 1 else 0.0
+        scale = float(np.mean(np.abs(tail)))
+        relative_std = float(np.std(tail) / max(scale, 1e-8))
+        maximum = float(np.max(np.abs(values)))
+        diagnostics["losses"][column] = {
+            "initial": float(values[0]),
+            "final": float(values[-1]),
+            "tail_mean": float(np.mean(tail)),
+            "tail_std": float(np.std(tail)),
+            "tail_relative_std": relative_std,
+            "tail_slope_per_epoch": slope,
+            "max_absolute": maximum,
+        }
+        if column not in {"discriminator_real", "discriminator_fake", "generator"}:
+            unstable_tail = unstable_tail or relative_std > 2.0
+        extreme_loss = extreme_loss or maximum > 1e4
+    diagnostics["warning_unstable_tail"] = unstable_tail
+    diagnostics["warning_extreme_loss"] = extreme_loss
+    if unstable_tail or extreme_loss:
+        diagnostics["status"] = "review"
+    return diagnostics
+
+
+def _save_training_artifacts(model, variant: str, output_dir: Path) -> Dict[str, Any]:
+    history = getattr(model, "training_history", pd.DataFrame())
+    diagnostics = _training_diagnostics(history)
+    atomic_write_csv(output_dir / f"training_history_{variant}.csv", history)
+
+    mixture = []
+    columns = list(getattr(model, "columns", []) or [])
+    for raw in getattr(model, "mixture_diagnostics", []):
+        item = dict(raw)
+        index = int(item["column_index"])
+        item["feature"] = columns[index] if 0 <= index < len(columns) else None
+        mixture.append(item)
+    atomic_write_json(output_dir / f"mixture_diagnostics_{variant}.json", mixture)
+    diagnostics["mixture_all_converged"] = all(
+        item.get("converged", False) for item in mixture
+    )
+    atomic_write_json(output_dir / f"training_diagnostics_{variant}.json", diagnostics)
+    return diagnostics
+
+
+def _fit_and_save_training(model, data: pd.DataFrame, variant: str, output_dir: Path):
+    try:
+        model.fit(data)
+    except Exception:
+        _save_training_artifacts(model, variant, output_dir)
+        raise
+    return _save_training_artifacts(model, variant, output_dir)
 
 
 def run_experiment(
@@ -212,12 +289,20 @@ def run_experiment(
     baseline_audit_path = output_dir / "baseline_synthetic_audit.csv"
     baseline_eval_path = output_dir / "synthetic_A0.csv"
     baseline_model = None
+    training_diagnostics_by_variant: Dict[str, Dict[str, Any]] = {}
     if resume and baseline_audit_path.exists() and baseline_eval_path.exists():
         baseline_audit = pd.read_csv(baseline_audit_path)
         baseline_eval = pd.read_csv(baseline_eval_path)
+        training_path = output_dir / "training_diagnostics_A0.json"
+        if training_path.exists():
+            training_diagnostics_by_variant["A0"] = json.loads(
+                training_path.read_text(encoding="utf-8")
+            )
     else:
         baseline_model = make_adapter("A0 GAN training")
-        baseline_model.fit(splits.train)
+        training_diagnostics_by_variant["A0"] = _fit_and_save_training(
+            baseline_model, splits.train, "A0", output_dir
+        )
         baseline_audit = baseline_model.sample(len(splits.audit))
         baseline_eval = baseline_model.sample(len(splits.train))
         atomic_write_csv(baseline_audit_path, baseline_audit)
@@ -251,7 +336,7 @@ def run_experiment(
         {feature: definition.to_dict() for feature, definition in definitions.items()},
     )
 
-    weighting = {"alpha": 1.0, "gamma": 0.25, "top_k": 5, "w_max": 2.0}
+    weighting = {"alpha": 2.0, "gamma": 0.5, "top_k": 5, "w_max": 3.0}
     weighting.update(config.get("weighting", {}))
     priorities = {
         variant: compute_feature_priority(components, variant, int(weighting["top_k"]))
@@ -280,7 +365,9 @@ def run_experiment(
                 variant, splits.train, priorities, definitions, weighting, seed, output_dir
             )
             model = make_adapter(f"{variant} GAN training")
-            model.fit(retrain)
+            training_diagnostics_by_variant[variant] = _fit_and_save_training(
+                model, retrain, variant, output_dir
+            )
             synthetic = model.sample(len(splits.train))
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
@@ -302,6 +389,12 @@ def run_experiment(
         if diagnostics:
             metrics["weight_mean"] = diagnostics["mean"]
             metrics["weight_fraction_capped"] = diagnostics["fraction_capped"]
+        training_audit = training_diagnostics_by_variant.get(variant, {})
+        metrics["training_stability_status"] = training_audit.get("status", "unavailable")
+        metrics["training_warning_unstable_tail"] = training_audit.get(
+            "warning_unstable_tail"
+        )
+        metrics["mixture_all_converged"] = training_audit.get("mixture_all_converged")
         atomic_write_json(metrics_path, metrics)
         atomic_write_csv(output_dir / f"feature_metrics_{variant}.csv", details)
         atomic_write_json(complete_marker, {"status": "complete"})

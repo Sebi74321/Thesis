@@ -26,6 +26,11 @@ For JupyterLab, open
 GPU/data preflight checks, launches or resumes the CLI, and displays the saved
 ablation tables, deltas, feature priorities, row weights, and diagnostic plots.
 
+Continuous-column mixture preprocessing retries non-converged fits and fails
+clearly if the retry also fails. Each GAN fit saves `training_history_A*.csv`,
+`training_diagnostics_A*.json`, and `mixture_diagnostics_A*.json`; non-finite
+losses or parameters stop the experiment rather than producing invalid output.
+
 Use `--device cuda` inside a one-GPU H100 job. `run_h100.slurm` is an example
 SLURM submission. Validation configs use `frozen=false`; after selecting the
 final settings, copy the config, set `frozen=true`, and run it once with

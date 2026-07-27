@@ -49,10 +49,10 @@
     "test_fraction": 0.1
   },
   "weighting": {
-    "alpha": 1.0,
-    "gamma": 0.25,
+    "alpha": 2.0,
+    "gamma": 0.5,
     "top_k": 5,
-    "w_max": 2.0
+    "w_max": 3.0
   },
   "detector": {
     "n_estimators": 300,
@@ -114,6 +114,9 @@
     "l2scale": 0.00001,
     "batch_size": 512,
     "epochs": 150,
+    "mixture_max_iter": 500,
+    "mixture_n_init": 3,
+    "mixture_tol": 0.001,
     "snapshot_frq": null
   },
   "smoke_rows": 500,

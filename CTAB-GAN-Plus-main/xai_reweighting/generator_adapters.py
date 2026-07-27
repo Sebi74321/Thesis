@@ -51,6 +51,9 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         allow_tf32: bool = False,
         progress: str = "auto",
         progress_label: str = "CTAB-GAN+",
+        mixture_max_iter: int = 500,
+        mixture_n_init: int = 3,
+        mixture_tol: float = 1e-3,
     ):
         self.categorical_columns = list(categorical_columns)
         self.log_columns = list(log_columns or [])
@@ -70,6 +73,9 @@ class CTABGANPlusAdapter(GeneratorAdapter):
             "device": str(device),
             "progress": progress,
             "progress_label": progress_label,
+            "mixture_max_iter": mixture_max_iter,
+            "mixture_n_init": mixture_n_init,
+            "mixture_tol": mixture_tol,
         }
         self.device = torch.device(device)
         self.seed = int(seed)
@@ -80,6 +86,8 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         self.data_prep = None
         self.synthesizer = None
         self.discriminator_snapshots = []
+        self.training_history = pd.DataFrame()
+        self.mixture_diagnostics = []
         self._sample_calls = 0
 
     def fit(self, df: pd.DataFrame) -> None:
@@ -109,14 +117,18 @@ class CTABGANPlusAdapter(GeneratorAdapter):
 
         self.synthesizer = CTABGANSynthesizer(**self.synthesizer_kwargs)
         self._sample_calls = 0
-        self.discriminator_snapshots = self.synthesizer.fit(
-            train_data=self.data_prep.df,
-            categorical=self.data_prep.column_types["categorical"],
-            mixed=self.data_prep.column_types["mixed"],
-            general=self.data_prep.column_types["general"],
-            non_categorical=self.data_prep.column_types["non_categorical"],
-            type=self.problem_type,
-        )
+        try:
+            self.discriminator_snapshots = self.synthesizer.fit(
+                train_data=self.data_prep.df,
+                categorical=self.data_prep.column_types["categorical"],
+                mixed=self.data_prep.column_types["mixed"],
+                general=self.data_prep.column_types["general"],
+                non_categorical=self.data_prep.column_types["non_categorical"],
+                type=self.problem_type,
+            )
+        finally:
+            self.training_history = pd.DataFrame(self.synthesizer.training_history)
+            self.mixture_diagnostics = list(self.synthesizer.mixture_diagnostics)
 
     def sample(self, n: int) -> pd.DataFrame:
         if self.synthesizer is None or self.data_prep is None or self.columns is None:
