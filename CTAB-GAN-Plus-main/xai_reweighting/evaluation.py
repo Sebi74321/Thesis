@@ -230,6 +230,9 @@ def evaluate_privacy(
     synthetic: pd.DataFrame,
     categorical_cols: Iterable[str],
     n_jobs: int = -1,
+    seed: int = 42,
+    max_reference_rows: int | None = None,
+    max_query_rows: int | None = None,
 ) -> Dict[str, float]:
     columns = real_train.columns.tolist()
     real_train = real_train[columns].copy()
@@ -240,16 +243,32 @@ def evaluate_privacy(
             real_train[column] = _cat(real_train[column])
             real_eval[column] = _cat(real_eval[column])
             synthetic[column] = _cat(synthetic[column])
+    train_hashes = set(pd.util.hash_pandas_object(real_train[columns], index=False).astype(str))
+    syn_hashes = pd.util.hash_pandas_object(synthetic[columns], index=False).astype(str)
+
+    def limited(frame, maximum, random_state):
+        if maximum is None or len(frame) <= maximum:
+            return frame
+        if maximum < 1:
+            raise ValueError("Privacy row limits must be positive")
+        return frame.sample(n=maximum, random_state=random_state)
+
+    reference = limited(real_train, max_reference_rows, seed)
+    eval_queries = limited(real_eval, max_query_rows, seed + 1)
+    synthetic_queries = limited(synthetic, max_query_rows, seed + 2)
     preprocessor = _predictor_preprocessor(columns, categorical_cols)
-    train_p = np.asarray(preprocessor.fit_transform(real_train[columns]), dtype=float)
-    eval_p = np.asarray(preprocessor.transform(real_eval[columns]), dtype=float)
-    syn_p = np.asarray(preprocessor.transform(synthetic[columns]), dtype=float)
+    train_p = np.asarray(preprocessor.fit_transform(reference[columns]), dtype=float)
+    eval_p = np.asarray(preprocessor.transform(eval_queries[columns]), dtype=float)
+    syn_p = np.asarray(preprocessor.transform(synthetic_queries[columns]), dtype=float)
     scale = np.sqrt(max(1, train_p.shape[1]))
     syn_dist = _nearest_distances(train_p, syn_p, n_jobs=n_jobs) / scale
     eval_dist = _nearest_distances(train_p, eval_p, n_jobs=n_jobs) / scale
-    train_hashes = set(pd.util.hash_pandas_object(real_train[columns], index=False).astype(str))
-    syn_hashes = pd.util.hash_pandas_object(synthetic[columns], index=False).astype(str)
-    metrics = {"privacy_exact_match_rate": float(syn_hashes.isin(train_hashes).mean())}
+    metrics = {
+        "privacy_exact_match_rate": float(syn_hashes.isin(train_hashes).mean()),
+        "privacy_reference_rows": int(len(reference)),
+        "privacy_synthetic_query_rows": int(len(synthetic_queries)),
+        "privacy_heldout_query_rows": int(len(eval_queries)),
+    }
     for name, distances in (("synthetic", syn_dist), ("heldout", eval_dist)):
         for percentile in (5, 50, 95):
             metrics[f"privacy_{name}_nn_p{percentile}"] = float(np.percentile(distances, percentile))
@@ -270,6 +289,8 @@ def evaluate_variant(
     seed: int = 42,
     n_jobs: int = -1,
     n_estimators: int = 300,
+    privacy_max_reference_rows: int | None = None,
+    privacy_max_query_rows: int | None = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame]:
     synthetic = synthetic.loc[:, real_train.columns]
     metrics, feature_details = evaluate_fidelity_and_tails(
@@ -281,7 +302,18 @@ def evaluate_variant(
             n_estimators=n_estimators, n_jobs=n_jobs,
         )
     )
-    metrics.update(evaluate_privacy(real_train, real_eval, synthetic, categorical_cols, n_jobs))
+    metrics.update(
+        evaluate_privacy(
+            real_train,
+            real_eval,
+            synthetic,
+            categorical_cols,
+            n_jobs=n_jobs,
+            seed=seed,
+            max_reference_rows=privacy_max_reference_rows,
+            max_query_rows=privacy_max_query_rows,
+        )
+    )
     audit = train_detector(
         real_eval,
         synthetic,

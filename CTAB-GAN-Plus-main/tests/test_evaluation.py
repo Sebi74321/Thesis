@@ -2,7 +2,11 @@ import numpy as np
 import pandas as pd
 
 from xai_reweighting.detector import train_detector
-from xai_reweighting.evaluation import evaluate_fidelity_and_tails, evaluate_utility
+from xai_reweighting.evaluation import (
+    evaluate_fidelity_and_tails,
+    evaluate_privacy,
+    evaluate_utility,
+)
 
 
 def test_identical_continuous_data_has_zero_tail_cdf_divergence():
@@ -54,3 +58,25 @@ def test_detector_accepts_equivalent_mixed_categorical_dtypes():
     )
 
     assert 0.0 <= result.metrics["detector_auc"] <= 1.0
+
+
+def test_privacy_sampling_limits_only_nearest_neighbor_workload():
+    train = pd.DataFrame({"x": np.arange(40), "category": np.arange(40) % 2})
+    heldout = pd.DataFrame({"x": np.arange(40, 60), "category": np.arange(20) % 2})
+    synthetic = train.iloc[:30].copy()
+
+    metrics = evaluate_privacy(
+        train,
+        heldout,
+        synthetic,
+        categorical_cols=["category"],
+        n_jobs=1,
+        seed=42,
+        max_reference_rows=10,
+        max_query_rows=5,
+    )
+
+    assert metrics["privacy_reference_rows"] == 10
+    assert metrics["privacy_synthetic_query_rows"] == 5
+    assert metrics["privacy_heldout_query_rows"] == 5
+    assert metrics["privacy_exact_match_rate"] == 1.0

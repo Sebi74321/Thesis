@@ -4,7 +4,7 @@ Explainability and Auditability in GAN-based Tabular Health Data Generation.
 
 ## XAI-guided weighted retraining
 
-The runner implements the MIMIC/CTAB-GAN+ variants `A0,A1,A2,A4,A5`.
+The runner implements the MIMIC and WiDS CTAB-GAN+ variants `A0,A1,A2,A4,A5`.
 Run it from `CTAB-GAN-Plus-main`.
 
 ```bash
@@ -15,6 +15,10 @@ python -m xai_reweighting.run_ablation \
 # Full run, automatically selecting CPU or CUDA
 python -m xai_reweighting.run_ablation \
   --config configs/mimic_ctabgan.json --stage val --device auto
+
+# WiDS H100 smoke test, then remove --smoke for the full run
+python -m xai_reweighting.run_ablation \
+  --config configs/wids_ctabgan.json --stage val --device cuda:0 --smoke
 ```
 
 GAN fits show epoch progress with elapsed time and ETA. In non-interactive
@@ -30,6 +34,18 @@ Continuous-column mixture preprocessing retries non-converged fits and fails
 clearly if the retry also fails. Each GAN fit saves `training_history_A*.csv`,
 `training_diagnostics_A*.json`, and `mixture_diagnostics_A*.json`; non-finite
 losses or parameters stop the experiment rather than producing invalid output.
+
+WiDS uses its larger-model settings (`batch_size=1024`, `epochs=200`,
+`random_dim=128`, `num_channels=96`) and a 5,000-row smoke test. Its exact-match
+privacy check remains exhaustive; nearest-neighbor privacy distances use
+deterministic 20,000-row reference and 10,000-row query caps to avoid a
+quadratic full-dataset evaluation.
+
+Submit WiDS through the shared SLURM script with:
+
+```bash
+sbatch --export=ALL,CONFIG=configs/wids_ctabgan.json run_h100.slurm
+```
 
 Use `--device cuda` inside a one-GPU H100 job. `run_h100.slurm` is an example
 SLURM submission. Validation configs use `frozen=false`; after selecting the

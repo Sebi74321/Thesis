@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -220,7 +221,9 @@ def run_experiment(
     data_path = (project_root / config["data_path"]).resolve()
     data_hash, code_hash = file_sha256(data_path), _code_hash(project_root)
     fingerprint = _fingerprint(config, data_hash, code_hash)
-    run_name = f"mimic_ctabgan_{stage}_seed{seed}_{fingerprint[:10]}"
+    dataset_name = str(config.get("dataset_name", data_path.stem)).strip().lower()
+    dataset_name = re.sub(r"[^a-z0-9_-]+", "_", dataset_name).strip("_") or "dataset"
+    run_name = f"{dataset_name}_ctabgan_{stage}_seed{seed}_{fingerprint[:10]}"
     output_dir = output_override or (project_root / config.get("results_dir", "results") / run_name)
     output_dir = output_dir.resolve()
 
@@ -372,6 +375,7 @@ def run_experiment(
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 
+        evaluation_cfg = config.get("evaluation", {})
         metrics, details = evaluate_variant(
             splits.train,
             real_eval,
@@ -381,7 +385,9 @@ def run_experiment(
             continuous,
             seed,
             int(config.get("n_jobs", -1)),
-            int(config.get("evaluation", {}).get("n_estimators", 300)),
+            n_estimators=int(evaluation_cfg.get("n_estimators", 300)),
+            privacy_max_reference_rows=evaluation_cfg.get("privacy_max_reference_rows"),
+            privacy_max_query_rows=evaluation_cfg.get("privacy_max_query_rows"),
         )
         metrics["variant"] = variant
         metrics["training_rows"] = len(splits.train) if variant == "A0" else len(retrain)
