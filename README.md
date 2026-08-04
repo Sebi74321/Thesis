@@ -60,3 +60,16 @@ prepares the existing CUDA 12.8 environment.
 
 Artifacts are written atomically under `CTAB-GAN-Plus-main/results/`. Use
 `--resume` only when the configuration, source data, and code are unchanged.
+
+Each new run also diagnoses a high A0 detector AUC by ranking features by
+TreeSHAP importance and comparing the top ten features separately within each
+outcome class. `baseline_conditional_detector_metrics.csv` reports fresh
+real-vs-synthetic AUCs within each class with the outcome column removed;
+`baseline_conditional_feature_diagnostics.csv` contains the corresponding
+continuous/categorical gaps. To add these artifacts to an existing run without
+retraining the GAN, run:
+
+```bash
+python -m xai_reweighting.run_diagnostics \
+  --config configs/mimic_ctabgan.json --run-dir results/<existing_run>
+```

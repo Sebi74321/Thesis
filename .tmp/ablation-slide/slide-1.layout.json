@@ -1,0 +1,3805 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/bobxga",
+    "id": "bobxga",
+    "slide": 1,
+    "layoutId": "d92f38c7-d4aa-402b-8e2a-03bb67f13bfd",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "525ccb82-1797-4a6d-81b8-4e6c5f45a34f",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "d92f38c7-d4aa-402b-8e2a-03bb67f13bfd",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "525ccb82-1797-4a6d-81b8-4e6c5f45a34f",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "525ccb82-1797-4a6d-81b8-4e6c5f45a34f",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/x0zex4nm",
+      "id": "1",
+      "name": "A5-highlight",
+      "bbox": [
+        1016,
+        175,
+        222,
+        426
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.0"
+      },
+      "geometry": "rect",
+      "fillColor": "#D0EDFA",
+      "lineColor": "#D0EDFA",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ax8v2p4v",
+      "id": "2",
+      "name": "ablation-timeline",
+      "bbox": [
+        142,
+        278,
+        988,
+        0.03
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.1"
+      },
+      "geometry": "straightConnector1",
+      "lineColor": "#B8BCC4",
+      "lineWidth": 2
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/byhwvu5g",
+      "id": "3",
+      "name": "comparison-A1",
+      "bbox": [
+        277,
+        615,
+        224,
+        58
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.2"
+      },
+      "geometry": "rect",
+      "text": "A1 − A0\nextra exposure",
+      "textPreview": "A1 − A0 | extra exposure",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#4B5563",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A1 − A0"
+          },
+          {
+            "index": 2,
+            "text": "extra exposure"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A1 − A0\nextra exposure",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#4B5563",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A1 − A0\nextra exposure",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#4B5563"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ov6d0fm5",
+      "id": "4",
+      "name": "comparison-A2",
+      "bbox": [
+        524,
+        615,
+        224,
+        58
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.3"
+      },
+      "geometry": "rect",
+      "text": "A2 − A1\nstatistical targeting",
+      "textPreview": "A2 − A1 | statistical targeting",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#4B5563",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A2 − A1"
+          },
+          {
+            "index": 2,
+            "text": "statistical targeting"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A2 − A1\nstatistical targeting",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#4B5563",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A2 − A1\nstatistical targeting",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#4B5563"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9wzetknq",
+      "id": "5",
+      "name": "comparison-A4",
+      "bbox": [
+        771,
+        615,
+        224,
+        58
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.4"
+      },
+      "geometry": "rect",
+      "text": "A4 − A2\nXAI contribution",
+      "textPreview": "A4 − A2 | XAI contribution",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#4B5563",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A4 − A2"
+          },
+          {
+            "index": 2,
+            "text": "XAI contribution"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A4 − A2\nXAI contribution",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#4B5563",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A4 − A2\nXAI contribution",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#4B5563"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/m9ovyp4z",
+      "id": "6",
+      "name": "comparison-A5",
+      "bbox": [
+        1018,
+        615,
+        224,
+        58
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.5"
+      },
+      "geometry": "rect",
+      "text": "A5 − A4\ntail / rare focus",
+      "textPreview": "A5 − A4 | tail / rare focus",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#4B5563",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A5 − A4"
+          },
+          {
+            "index": 2,
+            "text": "tail / rare focus"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A5 − A4\ntail / rare focus",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#4B5563",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A5 − A4\ntail / rare focus",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#4B5563"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nuxwru5k",
+      "id": "7",
+      "name": "node-A0",
+      "bbox": [
+        132,
+        268,
+        20,
+        20
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.6"
+      },
+      "geometry": "ellipse",
+      "fillColor": "#000000",
+      "lineColor": "#000000",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sradcjm9",
+      "id": "8",
+      "name": "variant-A0",
+      "bbox": [
+        47,
+        202,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.7"
+      },
+      "geometry": "rect",
+      "text": "A0",
+      "textPreview": "A0",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A0"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A0",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A0",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tsje5onu",
+      "id": "9",
+      "name": "heading-A0",
+      "bbox": [
+        37,
+        326,
+        210,
+        42
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.8"
+      },
+      "geometry": "rect",
+      "text": "Baseline",
+      "textPreview": "Baseline",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 23,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Baseline"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Baseline",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 23,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Baseline",
+              "fontSize": 23,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9kv6d0rm",
+      "id": "10",
+      "name": "description-A0",
+      "bbox": [
+        37,
+        382,
+        210,
+        92
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.9"
+      },
+      "geometry": "rect",
+      "text": "Original real_train\nNo augmentation",
+      "textPreview": "Original real_train | No augmentation",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Original real_train"
+          },
+          {
+            "index": 2,
+            "text": "No augmentation"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Original real_train\nNo augmentation",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "alignment": "center",
+            "verticalAlignment": "top",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Original real_train\nNo augmentation",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8jmp4va1",
+      "id": "11",
+      "name": "node-A1",
+      "bbox": [
+        379,
+        268,
+        20,
+        20
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.10"
+      },
+      "geometry": "ellipse",
+      "fillColor": "#000000",
+      "lineColor": "#000000",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nidobq9g",
+      "id": "12",
+      "name": "variant-A1",
+      "bbox": [
+        294,
+        202,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.11"
+      },
+      "geometry": "rect",
+      "text": "A1",
+      "textPreview": "A1",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A1"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A1",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A1",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mx472lsv",
+      "id": "13",
+      "name": "heading-A1",
+      "bbox": [
+        284,
+        326,
+        210,
+        42
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.12"
+      },
+      "geometry": "rect",
+      "text": "Exposure control",
+      "textPreview": "Exposure control",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 23,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Exposure control"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Exposure control",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 23,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Exposure control",
+              "fontSize": 23,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lwb69gra",
+      "id": "14",
+      "name": "description-A1",
+      "bbox": [
+        284,
+        382,
+        210,
+        92
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.13"
+      },
+      "geometry": "rect",
+      "text": "Uniform augmentation\nNo targeting signal",
+      "textPreview": "Uniform augmentation | No targeting signal",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Uniform"
+          },
+          {
+            "index": 2,
+            "text": "augmentation"
+          },
+          {
+            "index": 3,
+            "text": "No targeting signal"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Uniform augmentation\nNo targeting signal",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "alignment": "center",
+            "verticalAlignment": "top",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Uniform augmentation\nNo targeting signal",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0v250vap",
+      "id": "15",
+      "name": "node-A2",
+      "bbox": [
+        626,
+        268,
+        20,
+        20
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.14"
+      },
+      "geometry": "ellipse",
+      "fillColor": "#000000",
+      "lineColor": "#000000",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zuto7q94",
+      "id": "16",
+      "name": "variant-A2",
+      "bbox": [
+        541,
+        202,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.15"
+      },
+      "geometry": "rect",
+      "text": "A2",
+      "textPreview": "A2",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A2",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A2",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ytknylsz",
+      "id": "17",
+      "name": "heading-A2",
+      "bbox": [
+        531,
+        326,
+        210,
+        42
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.16"
+      },
+      "geometry": "rect",
+      "text": "Mismatch",
+      "textPreview": "Mismatch",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 23,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Mismatch"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Mismatch",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 23,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Mismatch",
+              "fontSize": 23,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5sf6lkru",
+      "id": "18",
+      "name": "description-A2",
+      "bbox": [
+        531,
+        382,
+        210,
+        92
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.17"
+      },
+      "geometry": "rect",
+      "text": "Weighted augmentation\nP = M",
+      "textPreview": "Weighted augmentation | P = M",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Weighted"
+          },
+          {
+            "index": 2,
+            "text": "augmentation"
+          },
+          {
+            "index": 3,
+            "text": "P = M"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Weighted augmentation\nP = M",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "alignment": "center",
+            "verticalAlignment": "top",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Weighted augmentation\nP = M",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/kr6pcfa9",
+      "id": "19",
+      "name": "node-A4",
+      "bbox": [
+        873,
+        268,
+        20,
+        20
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.18"
+      },
+      "geometry": "ellipse",
+      "fillColor": "#000000",
+      "lineColor": "#000000",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4ve9oji5",
+      "id": "20",
+      "name": "variant-A4",
+      "bbox": [
+        788,
+        202,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.19"
+      },
+      "geometry": "rect",
+      "text": "A4",
+      "textPreview": "A4",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A4"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A4",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A4",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5wnqhozq",
+      "id": "21",
+      "name": "heading-A4",
+      "bbox": [
+        778,
+        326,
+        210,
+        42
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.20"
+      },
+      "geometry": "rect",
+      "text": "XAI + mismatch",
+      "textPreview": "XAI + mismatch",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 23,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "XAI + mismatch"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "XAI + mismatch",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 23,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "XAI + mismatch",
+              "fontSize": 23,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/itwrmt0f",
+      "id": "22",
+      "name": "description-A4",
+      "bbox": [
+        778,
+        382,
+        210,
+        92
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.21"
+      },
+      "geometry": "rect",
+      "text": "Weighted augmentation\nP = 0.625 I + 0.375 M",
+      "textPreview": "Weighted augmentation | P = 0.625 I + 0.375 M",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Weighted"
+          },
+          {
+            "index": 2,
+            "text": "augmentation"
+          },
+          {
+            "index": 3,
+            "text": "P = 0.625 I + 0.375 M"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Weighted augmentation\nP = 0.625 I + 0.375 M",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "alignment": "center",
+            "verticalAlignment": "top",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Weighted augmentation\nP = 0.625 I + 0.375 M",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3u58fyhk",
+      "id": "23",
+      "name": "node-A5",
+      "bbox": [
+        1120,
+        268,
+        20,
+        20
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.22"
+      },
+      "geometry": "ellipse",
+      "fillColor": "#3D8DFF",
+      "lineColor": "#3D8DFF",
+      "lineWidth": 0
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gru9kji9",
+      "id": "24",
+      "name": "variant-A5",
+      "bbox": [
+        1035,
+        202,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.23"
+      },
+      "geometry": "rect",
+      "text": "A5",
+      "textPreview": "A5",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#1F65C7",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A5"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A5",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#1F65C7",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A5",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#1F65C7",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hsnqdozu",
+      "id": "25",
+      "name": "heading-A5",
+      "bbox": [
+        1025,
+        326,
+        210,
+        42
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.24"
+      },
+      "geometry": "rect",
+      "text": "Full method",
+      "textPreview": "Full method",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 23,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Full method"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Full method",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 23,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Full method",
+              "fontSize": 23,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/upcri903",
+      "id": "26",
+      "name": "description-A5",
+      "bbox": [
+        1025,
+        382,
+        210,
+        92
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.25"
+      },
+      "geometry": "rect",
+      "text": "Weighted augmentation\nP = 0.5 I + 0.3 M + 0.2 T",
+      "textPreview": "Weighted augmentation | P = 0.5 I + 0.3 M + 0.2 T",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 2,
+          "bottom": 0,
+          "left": 2
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Weighted"
+          },
+          {
+            "index": 2,
+            "text": "augmentation"
+          },
+          {
+            "index": 3,
+            "text": "P = 0.5 I + 0.3 M +"
+          },
+          {
+            "index": 4,
+            "text": "0.2 T"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Weighted augmentation\nP = 0.5 I + 0.3 M + 0.2 T",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "alignment": "center",
+            "verticalAlignment": "top",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 2,
+              "bottom": 0,
+              "left": 2
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Weighted augmentation\nP = 0.5 I + 0.3 M + 0.2 T",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vql8beho",
+      "id": "27",
+      "name": "eyebrow",
+      "bbox": [
+        42,
+        30,
+        420,
+        30
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.26"
+      },
+      "geometry": "rect",
+      "text": "ABLATION STUDY SETUP",
+      "textPreview": "ABLATION STUDY SETUP",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#3D8DFF",
+        "bold": true,
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ABLATION STUDY SETUP"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ABLATION STUDY SETUP",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#3D8DFF",
+            "bold": true,
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ABLATION STUDY SETUP",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#3D8DFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 28,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/83u9gzix",
+      "id": "28",
+      "name": "title",
+      "bbox": [
+        42,
+        62,
+        1196,
+        62
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.27"
+      },
+      "geometry": "rect",
+      "text": "Five controlled variants isolate where gains come from",
+      "textPreview": "Five controlled variants isolate where gains come from",
+      "resolvedFontSize": 48,
+      "resolvedTextStyle": {
+        "fontSize": 48,
+        "typeface": "Arial",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Five controlled variants isolate where gains come from"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Five controlled variants isolate where gains come from",
+          "resolvedTextStyle": {
+            "fontSize": 48,
+            "typeface": "Arial",
+            "color": "#000000",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Five controlled variants isolate where gains come from",
+              "fontSize": 48,
+              "typeface": "Arial",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t43q94zi",
+      "id": "29",
+      "name": "subtitle",
+      "bbox": [
+        42,
+        132,
+        1120,
+        38
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.28"
+      },
+      "geometry": "rect",
+      "text": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size stay fixed.",
+      "textPreview": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size stay fixed.",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "fontSize": 22,
+        "typeface": "Arial",
+        "color": "#4B5563",
+        "alignment": "left",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size"
+          },
+          {
+            "index": 2,
+            "text": "stay fixed."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size stay fixed.",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Arial",
+            "color": "#4B5563",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size stay fixed.",
+              "fontSize": 22,
+              "typeface": "Arial",
+              "color": "#4B5563"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 30,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/by1sju1k",
+      "id": "30",
+      "name": "comparison-label",
+      "bbox": [
+        42,
+        620,
+        190,
+        48
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.29"
+      },
+      "geometry": "rect",
+      "text": "CONTROLLED\nREADOUT",
+      "textPreview": "CONTROLLED | READOUT",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#000000",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CONTROLLED"
+          },
+          {
+            "index": 2,
+            "text": "READOUT"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CONTROLLED\nREADOUT",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21.33,
+            "typeface": "Arial",
+            "color": "#000000",
+            "bold": true,
+            "verticalAlignment": "middle",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CONTROLLED\nREADOUT",
+              "fontSize": 21.33,
+              "typeface": "Arial",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 31,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/axsrqpkz",
+      "id": "31",
+      "name": "A3-note",
+      "bbox": [
+        1016,
+        682,
+        222,
+        22
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.30"
+      },
+      "geometry": "rect",
+      "text": "A3 is outside this milestone",
+      "textPreview": "A3 is outside this milestone",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#6B7280",
+        "alignment": "right",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A3 is outside this milestone"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A3 is outside this milestone",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#6B7280",
+            "alignment": "right",
+            "autoFit": "none",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A3 is outside this milestone",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#6B7280"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    }
+  ],
+  "composeRuns": [
+    {
+      "index": 1,
+      "frame": {
+        "left": 0,
+        "top": 0,
+        "width": 1280,
+        "height": 720
+      },
+      "baseUnit": 1,
+      "root": {
+        "path": "0",
+        "kind": "layers",
+        "name": "ablation-study-timeline",
+        "requestedSize": {
+          "width": {
+            "mode": "fill",
+            "value": 1
+          },
+          "height": {
+            "mode": "fill",
+            "value": 1
+          }
+        },
+        "intrinsicSize": {
+          "width": 1242,
+          "height": 704
+        },
+        "frame": {
+          "left": 0,
+          "top": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "children": [
+          {
+            "path": "0.0",
+            "kind": "shape",
+            "name": "A5-highlight",
+            "position": {
+              "left": 1016,
+              "top": 175
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 222
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 426
+              }
+            },
+            "intrinsicSize": {
+              "width": 222,
+              "height": 426
+            },
+            "frame": {
+              "left": 1016,
+              "top": 175,
+              "width": 222,
+              "height": 426
+            },
+            "snappedFrame": {
+              "left": 1016,
+              "top": 175,
+              "width": 222,
+              "height": 426
+            },
+            "children": [],
+            "geometry": "rect",
+            "element": {
+              "aid": "sh/x0zex4nm",
+              "id": "1",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.1",
+            "kind": "shape",
+            "name": "ablation-timeline",
+            "position": {
+              "left": 142,
+              "top": 278
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 988
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 0.03
+              }
+            },
+            "intrinsicSize": {
+              "width": 988,
+              "height": 0.03
+            },
+            "frame": {
+              "left": 142,
+              "top": 278,
+              "width": 988,
+              "height": 0.03
+            },
+            "snappedFrame": {
+              "left": 142,
+              "top": 278,
+              "width": 988,
+              "height": 0.03
+            },
+            "children": [],
+            "geometry": "straightConnector1",
+            "element": {
+              "aid": "sh/ax8v2p4v",
+              "id": "2",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.2",
+            "kind": "text",
+            "name": "comparison-A1",
+            "position": {
+              "left": 277,
+              "top": 615
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 224
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 58
+              }
+            },
+            "intrinsicSize": {
+              "width": 224,
+              "height": 58
+            },
+            "frame": {
+              "left": 277,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "snappedFrame": {
+              "left": 277,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "children": [],
+            "text": "A1 − A0\nextra exposure",
+            "transform": "none",
+            "element": {
+              "aid": "sh/byhwvu5g",
+              "id": "3",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.3",
+            "kind": "text",
+            "name": "comparison-A2",
+            "position": {
+              "left": 524,
+              "top": 615
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 224
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 58
+              }
+            },
+            "intrinsicSize": {
+              "width": 224,
+              "height": 58
+            },
+            "frame": {
+              "left": 524,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "snappedFrame": {
+              "left": 524,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "children": [],
+            "text": "A2 − A1\nstatistical targeting",
+            "transform": "none",
+            "element": {
+              "aid": "sh/ov6d0fm5",
+              "id": "4",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.4",
+            "kind": "text",
+            "name": "comparison-A4",
+            "position": {
+              "left": 771,
+              "top": 615
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 224
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 58
+              }
+            },
+            "intrinsicSize": {
+              "width": 224,
+              "height": 58
+            },
+            "frame": {
+              "left": 771,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "snappedFrame": {
+              "left": 771,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "children": [],
+            "text": "A4 − A2\nXAI contribution",
+            "transform": "none",
+            "element": {
+              "aid": "sh/9wzetknq",
+              "id": "5",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.5",
+            "kind": "text",
+            "name": "comparison-A5",
+            "position": {
+              "left": 1018,
+              "top": 615
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 224
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 58
+              }
+            },
+            "intrinsicSize": {
+              "width": 224,
+              "height": 58
+            },
+            "frame": {
+              "left": 1018,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "snappedFrame": {
+              "left": 1018,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            },
+            "children": [],
+            "text": "A5 − A4\ntail / rare focus",
+            "transform": "none",
+            "element": {
+              "aid": "sh/m9ovyp4z",
+              "id": "6",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.6",
+            "kind": "shape",
+            "name": "node-A0",
+            "position": {
+              "left": 132,
+              "top": 268
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 20
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 20
+              }
+            },
+            "intrinsicSize": {
+              "width": 20,
+              "height": 20
+            },
+            "frame": {
+              "left": 132,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "snappedFrame": {
+              "left": 132,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "children": [],
+            "geometry": "ellipse",
+            "element": {
+              "aid": "sh/nuxwru5k",
+              "id": "7",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.7",
+            "kind": "text",
+            "name": "variant-A0",
+            "position": {
+              "left": 47,
+              "top": 202
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 47,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 47,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "A0",
+            "transform": "none",
+            "element": {
+              "aid": "sh/sradcjm9",
+              "id": "8",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.8",
+            "kind": "text",
+            "name": "heading-A0",
+            "position": {
+              "left": 37,
+              "top": 326
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 42
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 42
+            },
+            "frame": {
+              "left": 37,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "snappedFrame": {
+              "left": 37,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "children": [],
+            "text": "Baseline",
+            "transform": "none",
+            "element": {
+              "aid": "sh/tsje5onu",
+              "id": "9",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.9",
+            "kind": "text",
+            "name": "description-A0",
+            "position": {
+              "left": 37,
+              "top": 382
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 92
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 92
+            },
+            "frame": {
+              "left": 37,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "snappedFrame": {
+              "left": 37,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "children": [],
+            "text": "Original real_train\nNo augmentation",
+            "transform": "none",
+            "element": {
+              "aid": "sh/9kv6d0rm",
+              "id": "10",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.10",
+            "kind": "shape",
+            "name": "node-A1",
+            "position": {
+              "left": 379,
+              "top": 268
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 20
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 20
+              }
+            },
+            "intrinsicSize": {
+              "width": 20,
+              "height": 20
+            },
+            "frame": {
+              "left": 379,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "snappedFrame": {
+              "left": 379,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "children": [],
+            "geometry": "ellipse",
+            "element": {
+              "aid": "sh/8jmp4va1",
+              "id": "11",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.11",
+            "kind": "text",
+            "name": "variant-A1",
+            "position": {
+              "left": 294,
+              "top": 202
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 294,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 294,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "A1",
+            "transform": "none",
+            "element": {
+              "aid": "sh/nidobq9g",
+              "id": "12",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.12",
+            "kind": "text",
+            "name": "heading-A1",
+            "position": {
+              "left": 284,
+              "top": 326
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 42
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 42
+            },
+            "frame": {
+              "left": 284,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "snappedFrame": {
+              "left": 284,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "children": [],
+            "text": "Exposure control",
+            "transform": "none",
+            "element": {
+              "aid": "sh/mx472lsv",
+              "id": "13",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.13",
+            "kind": "text",
+            "name": "description-A1",
+            "position": {
+              "left": 284,
+              "top": 382
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 92
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 92
+            },
+            "frame": {
+              "left": 284,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "snappedFrame": {
+              "left": 284,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "children": [],
+            "text": "Uniform augmentation\nNo targeting signal",
+            "transform": "none",
+            "element": {
+              "aid": "sh/lwb69gra",
+              "id": "14",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.14",
+            "kind": "shape",
+            "name": "node-A2",
+            "position": {
+              "left": 626,
+              "top": 268
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 20
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 20
+              }
+            },
+            "intrinsicSize": {
+              "width": 20,
+              "height": 20
+            },
+            "frame": {
+              "left": 626,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "snappedFrame": {
+              "left": 626,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "children": [],
+            "geometry": "ellipse",
+            "element": {
+              "aid": "sh/0v250vap",
+              "id": "15",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.15",
+            "kind": "text",
+            "name": "variant-A2",
+            "position": {
+              "left": 541,
+              "top": 202
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 541,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 541,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "A2",
+            "transform": "none",
+            "element": {
+              "aid": "sh/zuto7q94",
+              "id": "16",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.16",
+            "kind": "text",
+            "name": "heading-A2",
+            "position": {
+              "left": 531,
+              "top": 326
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 42
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 42
+            },
+            "frame": {
+              "left": 531,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "snappedFrame": {
+              "left": 531,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "children": [],
+            "text": "Mismatch",
+            "transform": "none",
+            "element": {
+              "aid": "sh/ytknylsz",
+              "id": "17",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.17",
+            "kind": "text",
+            "name": "description-A2",
+            "position": {
+              "left": 531,
+              "top": 382
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 92
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 92
+            },
+            "frame": {
+              "left": 531,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "snappedFrame": {
+              "left": 531,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "children": [],
+            "text": "Weighted augmentation\nP = M",
+            "transform": "none",
+            "element": {
+              "aid": "sh/5sf6lkru",
+              "id": "18",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.18",
+            "kind": "shape",
+            "name": "node-A4",
+            "position": {
+              "left": 873,
+              "top": 268
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 20
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 20
+              }
+            },
+            "intrinsicSize": {
+              "width": 20,
+              "height": 20
+            },
+            "frame": {
+              "left": 873,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "snappedFrame": {
+              "left": 873,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "children": [],
+            "geometry": "ellipse",
+            "element": {
+              "aid": "sh/kr6pcfa9",
+              "id": "19",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.19",
+            "kind": "text",
+            "name": "variant-A4",
+            "position": {
+              "left": 788,
+              "top": 202
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 788,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 788,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "A4",
+            "transform": "none",
+            "element": {
+              "aid": "sh/4ve9oji5",
+              "id": "20",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.20",
+            "kind": "text",
+            "name": "heading-A4",
+            "position": {
+              "left": 778,
+              "top": 326
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 42
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 42
+            },
+            "frame": {
+              "left": 778,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "snappedFrame": {
+              "left": 778,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "children": [],
+            "text": "XAI + mismatch",
+            "transform": "none",
+            "element": {
+              "aid": "sh/5wnqhozq",
+              "id": "21",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.21",
+            "kind": "text",
+            "name": "description-A4",
+            "position": {
+              "left": 778,
+              "top": 382
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 92
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 92
+            },
+            "frame": {
+              "left": 778,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "snappedFrame": {
+              "left": 778,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "children": [],
+            "text": "Weighted augmentation\nP = 0.625 I + 0.375 M",
+            "transform": "none",
+            "element": {
+              "aid": "sh/itwrmt0f",
+              "id": "22",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.22",
+            "kind": "shape",
+            "name": "node-A5",
+            "position": {
+              "left": 1120,
+              "top": 268
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 20
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 20
+              }
+            },
+            "intrinsicSize": {
+              "width": 20,
+              "height": 20
+            },
+            "frame": {
+              "left": 1120,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "snappedFrame": {
+              "left": 1120,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            },
+            "children": [],
+            "geometry": "ellipse",
+            "element": {
+              "aid": "sh/3u58fyhk",
+              "id": "23",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.23",
+            "kind": "text",
+            "name": "variant-A5",
+            "position": {
+              "left": 1035,
+              "top": 202
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 1035,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 1035,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "A5",
+            "transform": "none",
+            "element": {
+              "aid": "sh/gru9kji9",
+              "id": "24",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.24",
+            "kind": "text",
+            "name": "heading-A5",
+            "position": {
+              "left": 1025,
+              "top": 326
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 42
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 42
+            },
+            "frame": {
+              "left": 1025,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "snappedFrame": {
+              "left": 1025,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            },
+            "children": [],
+            "text": "Full method",
+            "transform": "none",
+            "element": {
+              "aid": "sh/hsnqdozu",
+              "id": "25",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.25",
+            "kind": "text",
+            "name": "description-A5",
+            "position": {
+              "left": 1025,
+              "top": 382
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 210
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 92
+              }
+            },
+            "intrinsicSize": {
+              "width": 210,
+              "height": 92
+            },
+            "frame": {
+              "left": 1025,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "snappedFrame": {
+              "left": 1025,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            },
+            "children": [],
+            "text": "Weighted augmentation\nP = 0.5 I + 0.3 M + 0.2 T",
+            "transform": "none",
+            "element": {
+              "aid": "sh/upcri903",
+              "id": "26",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.26",
+            "kind": "text",
+            "name": "eyebrow",
+            "position": {
+              "left": 42,
+              "top": 30
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 420
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 30
+              }
+            },
+            "intrinsicSize": {
+              "width": 420,
+              "height": 30
+            },
+            "frame": {
+              "left": 42,
+              "top": 30,
+              "width": 420,
+              "height": 30
+            },
+            "snappedFrame": {
+              "left": 42,
+              "top": 30,
+              "width": 420,
+              "height": 30
+            },
+            "children": [],
+            "text": "ABLATION STUDY SETUP",
+            "transform": "none",
+            "element": {
+              "aid": "sh/vql8beho",
+              "id": "27",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.27",
+            "kind": "text",
+            "name": "title",
+            "position": {
+              "left": 42,
+              "top": 62
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 1196
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 62
+              }
+            },
+            "intrinsicSize": {
+              "width": 1196,
+              "height": 62
+            },
+            "frame": {
+              "left": 42,
+              "top": 62,
+              "width": 1196,
+              "height": 62
+            },
+            "snappedFrame": {
+              "left": 42,
+              "top": 62,
+              "width": 1196,
+              "height": 62
+            },
+            "children": [],
+            "text": "Five controlled variants isolate where gains come from",
+            "transform": "none",
+            "element": {
+              "aid": "sh/83u9gzix",
+              "id": "28",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.28",
+            "kind": "text",
+            "name": "subtitle",
+            "position": {
+              "left": 42,
+              "top": 132
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 1120
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 38
+              }
+            },
+            "intrinsicSize": {
+              "width": 1120,
+              "height": 38
+            },
+            "frame": {
+              "left": 42,
+              "top": 132,
+              "width": 1120,
+              "height": 38
+            },
+            "snappedFrame": {
+              "left": 42,
+              "top": 132,
+              "width": 1120,
+              "height": 38
+            },
+            "children": [],
+            "text": "Each step changes one design choice; seed, base rows, augmentation size, generator settings and output size stay fixed.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/t43q94zi",
+              "id": "29",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.29",
+            "kind": "text",
+            "name": "comparison-label",
+            "position": {
+              "left": 42,
+              "top": 620
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 190
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 48
+              }
+            },
+            "intrinsicSize": {
+              "width": 190,
+              "height": 48
+            },
+            "frame": {
+              "left": 42,
+              "top": 620,
+              "width": 190,
+              "height": 48
+            },
+            "snappedFrame": {
+              "left": 42,
+              "top": 620,
+              "width": 190,
+              "height": 48
+            },
+            "children": [],
+            "text": "CONTROLLED\nREADOUT",
+            "transform": "none",
+            "element": {
+              "aid": "sh/by1sju1k",
+              "id": "30",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.30",
+            "kind": "text",
+            "name": "A3-note",
+            "position": {
+              "left": 1016,
+              "top": 682
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 222
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 22
+              }
+            },
+            "intrinsicSize": {
+              "width": 222,
+              "height": 22
+            },
+            "frame": {
+              "left": 1016,
+              "top": 682,
+              "width": 222,
+              "height": 22
+            },
+            "snappedFrame": {
+              "left": 1016,
+              "top": 682,
+              "width": 222,
+              "height": 22
+            },
+            "children": [],
+            "text": "A3 is outside this milestone",
+            "transform": "none",
+            "element": {
+              "aid": "sh/axsrqpkz",
+              "id": "31",
+              "kind": "shape"
+            }
+          }
+        ],
+        "padding": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        },
+        "alignItems": "stretch",
+        "justifyItems": "stretch",
+        "contentFrame": {
+          "left": 0,
+          "top": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "items": [
+          {
+            "path": "0.0",
+            "frame": {
+              "left": 1016,
+              "top": 175,
+              "width": 222,
+              "height": 426
+            }
+          },
+          {
+            "path": "0.1",
+            "frame": {
+              "left": 142,
+              "top": 278,
+              "width": 988,
+              "height": 0.03
+            }
+          },
+          {
+            "path": "0.2",
+            "frame": {
+              "left": 277,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            }
+          },
+          {
+            "path": "0.3",
+            "frame": {
+              "left": 524,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            }
+          },
+          {
+            "path": "0.4",
+            "frame": {
+              "left": 771,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            }
+          },
+          {
+            "path": "0.5",
+            "frame": {
+              "left": 1018,
+              "top": 615,
+              "width": 224,
+              "height": 58
+            }
+          },
+          {
+            "path": "0.6",
+            "frame": {
+              "left": 132,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            }
+          },
+          {
+            "path": "0.7",
+            "frame": {
+              "left": 47,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.8",
+            "frame": {
+              "left": 37,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            }
+          },
+          {
+            "path": "0.9",
+            "frame": {
+              "left": 37,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            }
+          },
+          {
+            "path": "0.10",
+            "frame": {
+              "left": 379,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            }
+          },
+          {
+            "path": "0.11",
+            "frame": {
+              "left": 294,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.12",
+            "frame": {
+              "left": 284,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            }
+          },
+          {
+            "path": "0.13",
+            "frame": {
+              "left": 284,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            }
+          },
+          {
+            "path": "0.14",
+            "frame": {
+              "left": 626,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            }
+          },
+          {
+            "path": "0.15",
+            "frame": {
+              "left": 541,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.16",
+            "frame": {
+              "left": 531,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            }
+          },
+          {
+            "path": "0.17",
+            "frame": {
+              "left": 531,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            }
+          },
+          {
+            "path": "0.18",
+            "frame": {
+              "left": 873,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            }
+          },
+          {
+            "path": "0.19",
+            "frame": {
+              "left": 788,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.20",
+            "frame": {
+              "left": 778,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            }
+          },
+          {
+            "path": "0.21",
+            "frame": {
+              "left": 778,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            }
+          },
+          {
+            "path": "0.22",
+            "frame": {
+              "left": 1120,
+              "top": 268,
+              "width": 20,
+              "height": 20
+            }
+          },
+          {
+            "path": "0.23",
+            "frame": {
+              "left": 1035,
+              "top": 202,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.24",
+            "frame": {
+              "left": 1025,
+              "top": 326,
+              "width": 210,
+              "height": 42
+            }
+          },
+          {
+            "path": "0.25",
+            "frame": {
+              "left": 1025,
+              "top": 382,
+              "width": 210,
+              "height": 92
+            }
+          },
+          {
+            "path": "0.26",
+            "frame": {
+              "left": 42,
+              "top": 30,
+              "width": 420,
+              "height": 30
+            }
+          },
+          {
+            "path": "0.27",
+            "frame": {
+              "left": 42,
+              "top": 62,
+              "width": 1196,
+              "height": 62
+            }
+          },
+          {
+            "path": "0.28",
+            "frame": {
+              "left": 42,
+              "top": 132,
+              "width": 1120,
+              "height": 38
+            }
+          },
+          {
+            "path": "0.29",
+            "frame": {
+              "left": 42,
+              "top": 620,
+              "width": 190,
+              "height": 48
+            }
+          },
+          {
+            "path": "0.30",
+            "frame": {
+              "left": 1016,
+              "top": 682,
+              "width": 222,
+              "height": 22
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

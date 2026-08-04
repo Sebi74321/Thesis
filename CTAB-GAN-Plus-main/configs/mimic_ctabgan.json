@@ -59,6 +59,11 @@
     "n_estimators": 300,
     "shap_max_rows": 2000
   },
+  "baseline_diagnostics": {
+    "enabled": true,
+    "top_n": 10,
+    "n_estimators": 300
+  },
   "evaluation": {
     "n_estimators": 300
   },

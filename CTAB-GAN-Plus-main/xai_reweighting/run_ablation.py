@@ -17,6 +17,7 @@ import pandas as pd
 from .augmentation import create_uniform_augmentation, create_weighted_augmentation
 from .data_split import create_data_splits
 from .detector import train_detector
+from .diagnostics import baseline_detector_diagnostics
 from .evaluation import evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .scoring import (
@@ -216,6 +217,7 @@ def run_experiment(
         config["generator"]["batch_size"] = int(config.get("smoke_batch_size", 64))
         config.setdefault("detector", {})["n_estimators"] = 20
         config["detector"]["shap_max_rows"] = 100
+        config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
         config.setdefault("evaluation", {})["n_estimators"] = 20
 
     data_path = (project_root / config["data_path"]).resolve()
@@ -331,6 +333,37 @@ def run_experiment(
     )
     atomic_write_csv(output_dir / "baseline_feature_components.csv", components)
     atomic_write_json(output_dir / "baseline_detector_metrics.json", audit_result.metrics)
+    diagnostics_cfg = config.get("baseline_diagnostics", {})
+    if diagnostics_cfg.get("enabled", True):
+        ranking, conditional_features, conditional_categories, conditional_detectors = (
+            baseline_detector_diagnostics(
+                splits.audit,
+                baseline_audit,
+                components,
+                config["target_col"],
+                config["categorical_cols"],
+                continuous,
+                top_n=int(diagnostics_cfg.get("top_n", 10)),
+                seed=seed,
+                n_estimators=int(
+                    diagnostics_cfg.get(
+                        "n_estimators", detector_cfg.get("n_estimators", 300)
+                    )
+                ),
+                n_jobs=int(config.get("n_jobs", -1)),
+                detector_fn=train_detector,
+            )
+        )
+        atomic_write_csv(output_dir / "baseline_detector_feature_ranking.csv", ranking)
+        atomic_write_csv(
+            output_dir / "baseline_conditional_feature_diagnostics.csv", conditional_features
+        )
+        atomic_write_csv(
+            output_dir / "baseline_conditional_category_frequencies.csv", conditional_categories
+        )
+        atomic_write_csv(
+            output_dir / "baseline_conditional_detector_metrics.csv", conditional_detectors
+        )
     definitions = build_region_definitions(
         splits.train, splits.audit, baseline_audit, config["categorical_cols"], continuous
     )
