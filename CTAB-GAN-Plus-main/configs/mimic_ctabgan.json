@@ -67,6 +67,14 @@
   "evaluation": {
     "n_estimators": 300
   },
+  "mixed_utility": {
+    "enabled": true,
+    "additive_fractions": [0.0, 0.25, 0.5, 1.0],
+    "replacement_fractions": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "repeats": 5,
+    "n_estimators": 300,
+    "threshold_beta": 2.0
+  },
   "generator": {
     "categorical_columns": [
       "gender",

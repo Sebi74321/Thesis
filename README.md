@@ -73,3 +73,26 @@ retraining the GAN, run:
 python -m xai_reweighting.run_diagnostics \
   --config configs/mimic_ctabgan.json --run-dir results/<existing_run>
 ```
+
+## Mixed real/synthetic utility
+
+Full MIMIC and WiDS runs now include two downstream utility curves. The
+`additive` protocol retains all real training rows and adds 0%, 25%, 50%, or
+100% synthetic rows. The `replacement` protocol fixes the training size while
+replacing 0%, 25%, 50%, 75%, or 100% of real rows with synthetic rows. MIMIC
+uses five deterministic classifier repeats; the larger WiDS evaluation uses
+three repeats and 100-tree forests to control runtime.
+
+Recall-oriented operating points maximize F2 on development data. Validation
+runs select the threshold on `real_audit` and report on `real_val`; final runs
+select it on `real_val` and report once on `real_test`. Both default-threshold
+and tuned-threshold results are retained, alongside a real-only reference.
+
+The main artifacts are `utility_mixture_results.csv`,
+`utility_mixture_summary.csv`, and `utility_real_only_baseline.csv`. Add the
+evaluation to an existing non-smoke run without retraining any GAN with:
+
+```bash
+python -m xai_reweighting.run_mixed_utility \
+  --run-dir results/<existing_run>
+```

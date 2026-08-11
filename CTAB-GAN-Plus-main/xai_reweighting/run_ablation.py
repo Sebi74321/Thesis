@@ -20,6 +20,11 @@ from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
 from .evaluation import evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
+from .mixed_utility import (
+    evaluate_mixed_utility_curve,
+    evaluate_real_only_baseline,
+    summarize_mixed_utility,
+)
 from .scoring import (
     build_region_definitions,
     compute_feature_components,
@@ -219,6 +224,11 @@ def run_experiment(
         config["detector"]["shap_max_rows"] = 100
         config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
         config.setdefault("evaluation", {})["n_estimators"] = 20
+        mixed_smoke = config.setdefault("mixed_utility", {})
+        mixed_smoke["repeats"] = 1
+        mixed_smoke["n_estimators"] = 20
+        mixed_smoke["additive_fractions"] = [0.0, 1.0]
+        mixed_smoke["replacement_fractions"] = [0.0, 1.0]
 
     data_path = (project_root / config["data_path"]).resolve()
     data_hash, code_hash = file_sha256(data_path), _code_hash(project_root)
@@ -381,6 +391,65 @@ def run_experiment(
     for variant, priority in priorities.items():
         atomic_write_csv(output_dir / f"feature_scores_{variant}.csv", priority)
 
+    evaluation_cfg = config.get("evaluation", {})
+    mixed_cfg = config.get("mixed_utility", {})
+    mixed_enabled = bool(mixed_cfg.get("enabled", False))
+    mixed_results: List[pd.DataFrame] = []
+    real_only_utility = pd.DataFrame()
+    if mixed_enabled:
+        real_threshold = splits.audit if stage == "val" else splits.val
+        real_only_path = output_dir / "utility_real_only_baseline.csv"
+        if resume and real_only_path.exists():
+            real_only_utility = pd.read_csv(real_only_path)
+        else:
+            real_only_utility = evaluate_real_only_baseline(
+                splits.train,
+                real_threshold,
+                real_eval,
+                config["target_col"],
+                config["categorical_cols"],
+                repeats=int(mixed_cfg.get("repeats", 3)),
+                seed=seed,
+                n_estimators=int(
+                    mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
+                ),
+                n_jobs=int(config.get("n_jobs", -1)),
+                threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
+                progress=progress,
+            )
+            atomic_write_csv(real_only_path, real_only_utility)
+
+    def mixed_utility_for_variant(variant: str, synthetic: pd.DataFrame) -> pd.DataFrame:
+        path = output_dir / f"utility_mixture_{variant}.csv"
+        if resume and path.exists():
+            return pd.read_csv(path)
+        result = evaluate_mixed_utility_curve(
+            variant,
+            splits.train,
+            synthetic,
+            real_threshold,
+            real_eval,
+            config["target_col"],
+            config["categorical_cols"],
+            real_only_utility,
+            additive_fractions=mixed_cfg.get(
+                "additive_fractions", [0.0, 0.25, 0.5, 1.0]
+            ),
+            replacement_fractions=mixed_cfg.get(
+                "replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]
+            ),
+            repeats=int(mixed_cfg.get("repeats", 3)),
+            seed=seed,
+            n_estimators=int(
+                mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
+            ),
+            n_jobs=int(config.get("n_jobs", -1)),
+            threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
+            progress=progress,
+        )
+        atomic_write_csv(path, result)
+        return result
+
     rows: List[Dict[str, Any]] = []
     metrics_by_variant: Dict[str, Dict[str, Any]] = {}
     for variant in variants:
@@ -390,6 +459,11 @@ def run_experiment(
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             metrics_by_variant[variant] = metrics
             rows.append({"variant": variant, **metrics})
+            if mixed_enabled:
+                synthetic_path = output_dir / f"synthetic_{variant}.csv"
+                mixed_results.append(
+                    mixed_utility_for_variant(variant, pd.read_csv(synthetic_path))
+                )
             continue
 
         if variant == "A0":
@@ -408,7 +482,6 @@ def run_experiment(
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 
-        evaluation_cfg = config.get("evaluation", {})
         metrics, details = evaluate_variant(
             splits.train,
             real_eval,
@@ -437,6 +510,8 @@ def run_experiment(
         atomic_write_json(metrics_path, metrics)
         atomic_write_csv(output_dir / f"feature_metrics_{variant}.csv", details)
         atomic_write_json(complete_marker, {"status": "complete"})
+        if mixed_enabled:
+            mixed_results.append(mixed_utility_for_variant(variant, synthetic))
         metrics_by_variant[variant] = metrics
         rows.append(metrics)
 
@@ -458,6 +533,38 @@ def run_experiment(
                 summary.loc[row_mask, f"vs_previous_{key}"] = value
     atomic_write_csv(output_dir / "ablation_summary.csv", summary)
     atomic_write_csv(output_dir / "ablation_deltas.csv", pd.DataFrame(delta_rows))
+    if mixed_enabled and mixed_results:
+        mixed_all = pd.concat(mixed_results, ignore_index=True)
+        atomic_write_csv(output_dir / "utility_mixture_results.csv", mixed_all)
+        atomic_write_csv(
+            output_dir / "utility_mixture_summary.csv",
+            summarize_mixed_utility(mixed_all),
+        )
+        atomic_write_json(
+            output_dir / "utility_mixture_manifest.json",
+            {
+                "threshold_split": "audit" if stage == "val" else "val",
+                "evaluation_split": stage,
+                "variants": variants,
+                "additive_fractions": mixed_cfg.get(
+                    "additive_fractions", [0.0, 0.25, 0.5, 1.0]
+                ),
+                "replacement_fractions": mixed_cfg.get(
+                    "replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]
+                ),
+                "repeats": int(mixed_cfg.get("repeats", 3)),
+                "n_estimators": int(
+                    mixed_cfg.get(
+                        "n_estimators", evaluation_cfg.get("n_estimators", 300)
+                    )
+                ),
+                "threshold_beta": float(mixed_cfg.get("threshold_beta", 2.0)),
+                "fraction_semantics": {
+                    "additive": "synthetic rows divided by len(real_train)",
+                    "replacement": "synthetic rows divided by fixed total training rows",
+                },
+            },
+        )
     manifest.update(
         {
             "status": "complete",

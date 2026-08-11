@@ -20,6 +20,11 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert config["target_col"] in categorical
     assert config["generator"]["categorical_columns"] == categorical
     assert set(config["generator"]["general_columns"]) == set(continuous)
+    mixed = config["mixed_utility"]
+    assert mixed["enabled"] is True
+    assert mixed["additive_fractions"][0] == 0.0
+    assert mixed["replacement_fractions"] == [0.0, 0.25, 0.5, 0.75, 1.0]
+    assert mixed["threshold_beta"] == 2.0
 
 
 def test_mimic_age_is_general_and_integer():
@@ -41,3 +46,5 @@ def test_wids_large_dataset_settings():
     assert config["smoke_rows"] == 5000
     assert config["evaluation"]["privacy_max_reference_rows"] == 20000
     assert config["evaluation"]["privacy_max_query_rows"] == 10000
+    assert config["mixed_utility"]["repeats"] == 3
+    assert config["mixed_utility"]["n_estimators"] == 100

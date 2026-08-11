@@ -57,6 +57,14 @@ def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch)
         "seed": 42,
         "frozen": False,
         "weighting": {"alpha": 1.0, "gamma": 0.25, "top_k": 2, "w_max": 2.0},
+        "mixed_utility": {
+            "enabled": True,
+            "additive_fractions": [0.0, 1.0],
+            "replacement_fractions": [0.0, 1.0],
+            "repeats": 1,
+            "n_estimators": 5,
+            "threshold_beta": 2.0,
+        },
     }
     output = run_experiment(
         config,
@@ -71,3 +79,9 @@ def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch)
     assert summary["variant"].tolist() == list(VALID_VARIANTS)
     assert (output / "ablation_deltas.csv").exists()
     assert all((output / f"metrics_{variant}.json").exists() for variant in VALID_VARIANTS)
+    assert (output / "utility_real_only_baseline.csv").exists()
+    assert (output / "utility_mixture_results.csv").exists()
+    assert (output / "utility_mixture_summary.csv").exists()
+    mixture = pd.read_csv(output / "utility_mixture_results.csv")
+    assert set(mixture["variant"]) == set(VALID_VARIANTS)
+    assert set(mixture["protocol"]) == {"additive", "replacement"}

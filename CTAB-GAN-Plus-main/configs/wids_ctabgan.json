@@ -86,6 +86,14 @@
     "privacy_max_reference_rows": 20000,
     "privacy_max_query_rows": 10000
   },
+  "mixed_utility": {
+    "enabled": true,
+    "additive_fractions": [0.0, 0.25, 0.5, 1.0],
+    "replacement_fractions": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "repeats": 3,
+    "n_estimators": 100,
+    "threshold_beta": 2.0
+  },
   "generator": {
     "categorical_columns": [
       "elective_surgery",
