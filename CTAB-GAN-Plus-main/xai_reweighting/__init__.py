@@ -11,8 +11,11 @@ from .scoring import (
 
 __all__ = [
     "CTABGANPlusAdapter",
+    "CTGANAdapter",
+    "DPCGANAdapter",
     "DataSplits",
     "GeneratorAdapter",
+    "create_generator",
     "build_region_definitions",
     "compute_feature_components",
     "compute_feature_priority",
@@ -25,8 +28,23 @@ __all__ = [
 
 def __getattr__(name):
     """Load torch-backed adapters only when explicitly requested."""
-    if name in {"GeneratorAdapter", "CTABGANPlusAdapter"}:
-        from .generator_adapters import CTABGANPlusAdapter, GeneratorAdapter
+    if name in {
+        "GeneratorAdapter", "CTABGANPlusAdapter", "CTGANAdapter",
+        "DPCGANAdapter", "create_generator",
+    }:
+        from .generator_adapters import (
+            CTABGANPlusAdapter,
+            CTGANAdapter,
+            DPCGANAdapter,
+            GeneratorAdapter,
+            create_generator,
+        )
 
-        return {"GeneratorAdapter": GeneratorAdapter, "CTABGANPlusAdapter": CTABGANPlusAdapter}[name]
+        return {
+            "GeneratorAdapter": GeneratorAdapter,
+            "CTABGANPlusAdapter": CTABGANPlusAdapter,
+            "CTGANAdapter": CTGANAdapter,
+            "DPCGANAdapter": DPCGANAdapter,
+            "create_generator": create_generator,
+        }[name]
     raise AttributeError(name)

@@ -93,7 +93,7 @@ _thesis_setup_environment() (
   if command -v sha256sum >/dev/null 2>&1; then
     SETUP_FINGERPRINT="$(
       {
-        sha256sum "$REPO_ROOT/requirements-base.txt" "$REPO_ROOT/setup_env.sh"
+        sha256sum "$REPO_ROOT/requirements-base.txt" "$REPO_ROOT/requirements-generators.txt" "$REPO_ROOT/setup_env.sh"
         printf '%s\n' "$BACKEND" "$TORCH_INDEX_URL"
       } | sha256sum | cut -d' ' -f1
     )"
@@ -125,6 +125,7 @@ _thesis_setup_environment() (
       torchvision==0.22.0 \
       torchaudio==2.7.0 \
       --index-url "$TORCH_INDEX_URL"
+    "$PIP" install -r "$REPO_ROOT/requirements-generators.txt"
     "$PIP" install \
       notebook==7.2.2 \
       jupyterlab==4.2.5 \
@@ -171,6 +172,8 @@ import seaborn
 import shap
 import sklearn
 import torch
+from ctgan import CTGAN
+from dp_cgans import DP_CGAN
 
 print("Torch:", torch.__version__)
 print("CUDA build:", torch.version.cuda)
@@ -187,6 +190,8 @@ print("tqdm:", version("tqdm"))
 print("Matplotlib:", matplotlib.__version__)
 print("Seaborn:", seaborn.__version__)
 print("pytest:", version("pytest"))
+print("CTGAN:", version("ctgan"))
+print("DP-CGANS:", version("dp-cgans"))
 print("JupyterLab:", version("jupyterlab"))
 print("Notebook:", version("notebook"))
 print("ipykernel:", version("ipykernel"))

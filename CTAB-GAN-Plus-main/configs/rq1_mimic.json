@@ -1,0 +1,43 @@
+{
+  "base_config": "mimic_ctabgan.json",
+  "split_seed": 42,
+  "seeds": [42, 43, 44],
+  "models": {
+    "ctabgan_plus": {
+      "inherit_generator": true,
+      "smoke_epochs": 1,
+      "smoke_batch_size": 64
+    },
+    "ctgan": {
+      "embedding_dim": 128,
+      "generator_dim": [256, 256],
+      "discriminator_dim": [256, 256],
+      "generator_lr": 0.0002,
+      "discriminator_lr": 0.0002,
+      "batch_size": 500,
+      "discriminator_steps": 1,
+      "log_frequency": true,
+      "verbose": true,
+      "epochs": 150,
+      "pac": 10,
+      "smoke_epochs": 1,
+      "smoke_batch_size": 50
+    },
+    "dp_cgan": {
+      "generator_dim": [128, 128, 128],
+      "discriminator_dim": [128, 128, 128],
+      "generator_lr": 0.0002,
+      "discriminator_lr": 0.0002,
+      "batch_size": 500,
+      "discriminator_steps": 10,
+      "log_frequency": true,
+      "verbose": true,
+      "epochs": 150,
+      "pac": 10,
+      "private": true,
+      "saved_transformer": null,
+      "smoke_epochs": 1,
+      "smoke_batch_size": 50
+    }
+  }
+}

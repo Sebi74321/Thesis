@@ -4,6 +4,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from xai_reweighting.run_model_comparison import _load_config as load_rq1_config
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,3 +50,13 @@ def test_wids_large_dataset_settings():
     assert config["evaluation"]["privacy_max_query_rows"] == 10000
     assert config["mixed_utility"]["repeats"] == 3
     assert config["mixed_utility"]["n_estimators"] == 100
+
+
+@pytest.mark.parametrize("name", ["rq1_mimic.json", "rq1_wids.json"])
+def test_rq1_configs_define_all_models(name):
+    config = load_rq1_config(PROJECT_ROOT / "configs" / name)
+    assert set(config["models"]) == {"ctabgan_plus", "ctgan", "dp_cgan"}
+    assert config["models"]["dp_cgan"]["private"] is True
+    assert config["models"]["dp_cgan"]["saved_transformer"] is None
+    assert config["models"]["dp_cgan"]["discriminator_steps"] == 10
+    assert config["models"]["ctabgan_plus"]["categorical_columns"] == config["categorical_cols"]

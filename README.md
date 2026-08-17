@@ -2,6 +2,46 @@
 
 Explainability and Auditability in GAN-based Tabular Health Data Generation.
 
+## RQ1 multi-GAN baseline comparison
+
+RQ1 compares CTAB-GAN+, CTGAN 0.12.1, and DP-CGANS 0.2.0 on the same
+persisted MIMIC or WiDS split. Generator seeds change across runs, while the
+patient-row split stays fixed at seed 42.
+
+```bash
+cd CTAB-GAN-Plus-main
+
+# Fast, explicitly non-thesis CPU check
+python -m xai_reweighting.run_model_comparison \
+  --config configs/rq1_mimic.json --stage val --device cpu --smoke
+
+# Authoritative three-seed GPU run
+python -m xai_reweighting.run_model_comparison \
+  --config configs/rq1_mimic.json --stage val --device cuda:0 \
+  --models ctabgan_plus,ctgan,dp_cgan --seeds 42,43,44
+```
+
+For WiDS, use `configs/rq1_wids.json`. The runner writes a checkpoint and
+synthetic dataset after every completed fit, then evaluates that artifact. Use
+`--resume` after a disconnect. To detach the whole job from Jupyter or VPN:
+
+```bash
+nohup python -u -m xai_reweighting.run_model_comparison \
+  --config configs/rq1_wids.json --stage val --device cuda:0 \
+  --models ctabgan_plus,ctgan,dp_cgan --seeds 42,43,44 \
+  > rq1_wids.log 2>&1 &
+```
+
+Open `CTAB-GAN-Plus-main/notebooks/rq1_model_comparison.ipynb` to launch or
+resume the CLI and display `rq1_results.csv`, the mean/std summary, training
+history, DP accounting, and fidelity/utility/tail/privacy-proxy plots.
+
+DP-CGAN is always invoked with its upstream `private=True` mode. Its package
+hard-codes noise multiplier 1 and delta `2e-6`; the saved epsilon values are
+labeled `upstream_privacy_estimate_unverified`, because this implementation
+does not use conventional per-example DP-SGD clipping. They must not be
+presented as independently verified formal privacy guarantees.
+
 ## XAI-guided weighted retraining
 
 The runner implements the MIMIC and WiDS CTAB-GAN+ variants `A0,A1,A2,A4,A5`.
