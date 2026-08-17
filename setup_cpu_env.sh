@@ -7,4 +7,6 @@ python3 -m venv "$ENV_DIR"
 "$ENV_DIR/bin/pip" install -r requirements-base.txt
 "$ENV_DIR/bin/pip" install torch --index-url https://download.pytorch.org/whl/cpu
 
+"$ENV_DIR/bin/python" -c "import seaborn, torch; print('Torch:', torch.__version__); print('Seaborn:', seaborn.__version__)"
+
 echo "CPU environment ready. Activate with: source $ENV_DIR/bin/activate"

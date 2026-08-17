@@ -57,6 +57,13 @@ separately using either its CPU wheel or a cluster-compatible CUDA wheel.
 `setup_cpu_env.sh` prepares a Linux/macOS CPU environment,
 `setup_cpu_env.ps1` provides the Windows equivalent, and `setup_gpu_env.sh`
 prepares the existing CUDA 12.8 environment.
+The GPU setup logs to `setup_thesis310.log__ in the persistent project directory,
+replaces the `thesis310__ Jupyter kernel, and falls back to the matching CPU
+PyTorch wheel when no usable NVIDIA GPU is visible during setup.
+
+The supported GPU setup creates the Python 3.10 `thesis310` environment.
+`activate_thesis38.sh` is retained only for an already-existing legacy
+`thesis38` environment; it does not redirect to or create `thesis310`.
 
 Artifacts are written atomically under `CTAB-GAN-Plus-main/results/`. Use
 `--resume` only when the configuration, source data, and code are unchanged.
