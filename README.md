@@ -54,12 +54,12 @@ final settings, copy the config, set `frozen=true`, and run it once with
 
 Install shared packages from `requirements-base.txt` and install PyTorch
 separately using either its CPU wheel or a cluster-compatible CUDA wheel.
-`setup_cpu_env.sh` prepares a Linux/macOS CPU environment,
-`setup_cpu_env.ps1` provides the Windows equivalent, and `setup_gpu_env.sh`
-prepares the existing CUDA 12.8 environment.
-The GPU setup logs to `setup_thesis310.log__ in the persistent project directory,
-replaces the `thesis310__ Jupyter kernel, and falls back to the matching CPU
-PyTorch wheel when no usable NVIDIA GPU is visible during setup.
+`setup_cpu_env.sh` creates the dedicated Linux/macOS
+`.venv-thesis310-cpu` environment and `setup_cpu_env.ps1` provides the
+Windows equivalent. Both register the **Python 3.10 Thesis CPU** Jupyter kernel
+and log to `setup_thesis310_cpu.log`. `setup_gpu_env.sh` creates the
+separate CUDA-oriented `thesis310` environment and logs to
+`setup_thesis310.log` in the persistent project directory.
 
 The supported GPU setup creates the Python 3.10 `thesis310` environment.
 `activate_thesis38.sh` is retained only for an already-existing legacy

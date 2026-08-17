@@ -54,12 +54,9 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     torchaudio==2.7.0 \
     --index-url https://download.pytorch.org/whl/cu128
 else
-  echo "No usable GPU detected. Installing the CPU PyTorch build..."
-  "$PIP" install \
-    torch==2.7.0 \
-    torchvision==0.22.0 \
-    torchaudio==2.7.0 \
-    --index-url https://download.pytorch.org/whl/cpu
+  echo "No usable NVIDIA GPU is visible." >&2
+  echo "Run setup_gpu_env.sh inside a GPU allocation, or use setup_cpu_env.sh." >&2
+  exit 1
 fi
 
 "$PIP" install \
