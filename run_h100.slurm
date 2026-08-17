@@ -8,7 +8,7 @@
 
 set -Eeuo pipefail
 cd "${SLURM_SUBMIT_DIR:?Submit this script from the repository root}"
-source activate_thesis310.sh
+source setup_env.sh cuda
 cd CTAB-GAN-Plus-main
 CONFIG="${CONFIG:-configs/mimic_ctabgan.json}"
 python -m xai_reweighting.run_ablation \

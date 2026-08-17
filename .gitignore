@@ -1,6 +1,8 @@
 **/__pycache__/
 *.py[cod]
 .deps/
+.micromamba/
 .venv*/
 logs/
+setup_thesis310*.log
 CTAB-GAN-Plus-main/results/

@@ -52,18 +52,19 @@ SLURM submission. Validation configs use `frozen=false`; after selecting the
 final settings, copy the config, set `frozen=true`, and run it once with
 `--stage test`.
 
-Install shared packages from `requirements-base.txt` and install PyTorch
-separately using either its CPU wheel or a cluster-compatible CUDA wheel.
-`setup_cpu_env.sh` creates the dedicated Linux/macOS
-`.venv-thesis310-cpu` environment and `setup_cpu_env.ps1` provides the
-Windows equivalent. Both register the **Python 3.10 Thesis CPU** Jupyter kernel
-and log to `setup_thesis310_cpu.log`. `setup_gpu_env.sh` creates the
-separate CUDA-oriented `thesis310` environment and logs to
-`setup_thesis310.log` in the persistent project directory.
+The single setup entry point installs the shared packages, selects the matching
+PyTorch wheel, registers the Jupyter kernel, and activates the environment in
+the current shell:
 
-The supported GPU setup creates the Python 3.10 `thesis310` environment.
-`activate_thesis38.sh` is retained only for an already-existing legacy
-`thesis38` environment; it does not redirect to or create `thesis310`.
+```bash
+source setup_env.sh auto   # Detect CPU or CUDA
+source setup_env.sh cpu    # Force the CPU environment
+source setup_env.sh cuda   # Require a visible NVIDIA GPU
+```
+
+CPU and CUDA use separate Python 3.10 environments and kernels, so switching
+does not overwrite the PyTorch backend. Subsequent calls skip installation when
+the script and requirements are unchanged. Use `FORCE_SETUP=1` to reinstall.
 
 Artifacts are written atomically under `CTAB-GAN-Plus-main/results/`. Use
 `--resume` only when the configuration, source data, and code are unchanged.
