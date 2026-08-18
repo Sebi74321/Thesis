@@ -10,6 +10,7 @@ import pandas as pd
 
 from .diagnostics import baseline_detector_diagnostics
 from .io_utils import atomic_write_csv, file_sha256
+from .priority_diagnostics import prioritized_feature_diagnostics
 
 
 def run_existing_diagnostics(
@@ -35,6 +36,10 @@ def run_existing_diagnostics(
     components = pd.read_csv(run_dir / "baseline_feature_components.csv")
     diagnostic_config = config.get("baseline_diagnostics", {})
     detector_config = config.get("detector", {})
+    continuous = config.get(
+        "continuous_cols",
+        [column for column in data.columns if column not in config["categorical_cols"]],
+    )
 
     ranking, feature_gaps, category_gaps, detector_metrics = baseline_detector_diagnostics(
         real_audit,
@@ -42,10 +47,7 @@ def run_existing_diagnostics(
         components,
         config["target_col"],
         config["categorical_cols"],
-        config.get(
-            "continuous_cols",
-            [column for column in data.columns if column not in config["categorical_cols"]],
-        ),
+        continuous,
         top_n=int(top_n if top_n is not None else diagnostic_config.get("top_n", 10)),
         seed=int(config.get("seed", 42)),
         n_estimators=int(
@@ -59,6 +61,39 @@ def run_existing_diagnostics(
     atomic_write_csv(run_dir / "baseline_conditional_feature_diagnostics.csv", feature_gaps)
     atomic_write_csv(run_dir / "baseline_conditional_category_frequencies.csv", category_gaps)
     atomic_write_csv(run_dir / "baseline_conditional_detector_metrics.csv", detector_metrics)
+
+    priorities = {}
+    for variant in ("A2", "A4", "A5"):
+        path = run_dir / f"feature_scores_{variant}.csv"
+        if path.exists():
+            priorities[variant] = pd.read_csv(path)
+    if priorities:
+        priority_config = config.get("priority_diagnostics", {})
+        baseline_metrics_path = run_dir / "baseline_detector_metrics.json"
+        baseline_auc = 0.5
+        if baseline_metrics_path.exists():
+            baseline_auc = float(
+                json.loads(baseline_metrics_path.read_text(encoding="utf-8")).get(
+                    "detector_auc", baseline_auc
+                )
+            )
+        summary, spikes, ablation, correlations = prioritized_feature_diagnostics(
+            data.iloc[indices["train"]].reset_index(drop=True),
+            real_audit,
+            synthetic_audit,
+            priorities,
+            config["target_col"],
+            config["categorical_cols"],
+            continuous,
+            baseline_detector_auc=baseline_auc,
+            seed=int(config.get("seed", 42)),
+            n_estimators=int(priority_config.get("n_estimators", 100)),
+            n_jobs=int(config.get("n_jobs", -1)),
+        )
+        atomic_write_csv(run_dir / "prioritized_feature_diagnostics.csv", summary)
+        atomic_write_csv(run_dir / "prioritized_feature_value_spikes.csv", spikes)
+        atomic_write_csv(run_dir / "prioritized_feature_detector_ablation.csv", ablation)
+        atomic_write_csv(run_dir / "prioritized_feature_correlations.csv", correlations)
     return run_dir
 
 

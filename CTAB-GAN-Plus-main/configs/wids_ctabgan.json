@@ -81,6 +81,10 @@
     "top_n": 10,
     "n_estimators": 300
   },
+  "priority_diagnostics": {
+    "enabled": true,
+    "n_estimators": 50
+  },
   "evaluation": {
     "n_estimators": 300,
     "privacy_max_reference_rows": 20000,

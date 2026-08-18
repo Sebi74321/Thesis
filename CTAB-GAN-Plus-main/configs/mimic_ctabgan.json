@@ -64,6 +64,10 @@
     "top_n": 10,
     "n_estimators": 300
   },
+  "priority_diagnostics": {
+    "enabled": true,
+    "n_estimators": 100
+  },
   "evaluation": {
     "n_estimators": 300
   },

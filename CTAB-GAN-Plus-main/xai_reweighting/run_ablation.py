@@ -25,6 +25,7 @@ from .mixed_utility import (
     evaluate_real_only_baseline,
     summarize_mixed_utility,
 )
+from .priority_diagnostics import prioritized_feature_diagnostics
 from .scoring import (
     build_region_definitions,
     compute_feature_components,
@@ -223,6 +224,7 @@ def run_experiment(
         config.setdefault("detector", {})["n_estimators"] = 20
         config["detector"]["shap_max_rows"] = 100
         config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
+        config.setdefault("priority_diagnostics", {})["n_estimators"] = 20
         config.setdefault("evaluation", {})["n_estimators"] = 20
         mixed_smoke = config.setdefault("mixed_utility", {})
         mixed_smoke["repeats"] = 1
@@ -390,6 +392,28 @@ def run_experiment(
     }
     for variant, priority in priorities.items():
         atomic_write_csv(output_dir / f"feature_scores_{variant}.csv", priority)
+
+    priority_diagnostic_cfg = config.get("priority_diagnostics", {})
+    if priority_diagnostic_cfg.get("enabled", True):
+        priority_summary, priority_spikes, priority_detectors, priority_correlations = (
+            prioritized_feature_diagnostics(
+                splits.train,
+                splits.audit,
+                baseline_audit,
+                priorities,
+                config["target_col"],
+                config["categorical_cols"],
+                continuous,
+                baseline_detector_auc=float(audit_result.metrics["detector_auc"]),
+                seed=seed,
+                n_estimators=int(priority_diagnostic_cfg.get("n_estimators", 100)),
+                n_jobs=int(config.get("n_jobs", -1)),
+            )
+        )
+        atomic_write_csv(output_dir / "prioritized_feature_diagnostics.csv", priority_summary)
+        atomic_write_csv(output_dir / "prioritized_feature_value_spikes.csv", priority_spikes)
+        atomic_write_csv(output_dir / "prioritized_feature_detector_ablation.csv", priority_detectors)
+        atomic_write_csv(output_dir / "prioritized_feature_correlations.csv", priority_correlations)
 
     evaluation_cfg = config.get("evaluation", {})
     mixed_cfg = config.get("mixed_utility", {})
