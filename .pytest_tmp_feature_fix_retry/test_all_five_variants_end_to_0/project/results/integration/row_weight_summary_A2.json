@@ -1,0 +1,16 @@
+{
+  "25%": 1.0,
+  "50%": 1.0,
+  "75%": 1.0492191974567049,
+  "count": 60.0,
+  "fraction_above_one": 0.25,
+  "fraction_capped": 0.15,
+  "max": 2.0,
+  "mean": 1.1999999999999997,
+  "min": 1.0,
+  "std": 0.38292589191586685,
+  "warning_fraction_capped": true,
+  "warning_mean_outside_recommended_range": false,
+  "warning_median_far_from_one": false,
+  "warning_nearly_uniform": false
+}

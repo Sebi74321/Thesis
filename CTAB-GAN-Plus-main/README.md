@@ -21,6 +21,31 @@ macro precision/recall, balanced accuracy, accuracy, ROC-AUC, and PR-AUC. The
 configured positive label `F` is fixed before evaluation and is used only for
 ROC/PR and class-specific supplementary metrics.
 
+### Measurement-aware generation and priority sensitivity
+
+CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
+from the fitted training rows. Raw pre-restoration samples are saved as
+`synthetic_raw_<variant>.csv`; authoritative samples retain the usual
+`synthetic_<variant>.csv` names. The inferred grids are recorded in
+`measurement_precision_<variant>.json`. SpO2 maximum is configured as a mixed
+column with an explicit value at 100 so its common measurement ceiling can be
+modelled rather than approximated by arbitrary values just below 100.
+MIMIC WBC minimum and maximum are modelled in log space to reduce the excessive
+synthetic upper tail; the upstream positive-log inverse-transform assignment
+has been repaired so generated values return to the original clinical scale.
+
+Weighted variants select at most one feature from each connected correlation
+group by default (`|r| >= 0.65`). This prevents top-k selection from spending
+most of its priority on redundant minimum/mean/maximum measurements from one
+physiological family. The mapping is saved in
+`priority_correlation_groups.json`.
+
+`feature_family_detector_sensitivity.csv` and
+`feature_family_utility_sensitivity.csv` report what happens when each selected
+family, or every selected feature, is ignored. The latter covers both mortality
+and gender utility. These are evaluation-only sensitivity analyses; they do not
+remove the columns from GAN training.
+
 
 ## Prerequisite
 

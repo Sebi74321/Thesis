@@ -1,0 +1,4 @@
+model,seeds_completed,convergence_warning_count_mean,convergence_warning_count_std,detector_auc_mean,detector_auc_std,detector_auc_vs_real_reference,rq1_joint_rare_region_mass_error_mean,rq1_joint_rare_region_mass_error_std,synthetic_rows_mean,synthetic_rows_std,training_rows_mean,training_rows_std,training_seconds_mean,training_seconds_std,utility_roc_auc_mean,utility_roc_auc_std,epsilon_recomputed_actual_updates_mean,epsilon_recomputed_actual_updates_std,epsilon_recomputed_upstream_steps_mean,epsilon_recomputed_upstream_steps_std,upstream_reported_epsilon_mean,upstream_reported_epsilon_std
+ctabgan_plus,1,0.0,0.0,0.5,0.0,0.0,0.0,0.0,60.0,0.0,60.0,0.0,0.03398871421813965,0.0,0.5,0.0,,0.0,,0.0,,0.0
+ctgan,1,0.0,0.0,0.5,0.0,0.0,0.0,0.0,60.0,0.0,60.0,0.0,0.03251528739929199,0.0,0.5,0.0,,0.0,,0.0,,0.0
+dp_cgan,1,0.0,0.0,0.5,0.0,0.0,0.0,0.0,60.0,0.0,60.0,0.0,1.5994765758514404,0.0,0.5,0.0,4.765811463907519,0.0,0.0,0.0,,0.0

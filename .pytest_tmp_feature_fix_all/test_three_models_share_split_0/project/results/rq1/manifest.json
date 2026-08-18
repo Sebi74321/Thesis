@@ -1,0 +1,28 @@
+{
+  "code_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "completed_at": "2026-08-18T14:16:31.487603+00:00",
+  "completed_model_seed_runs": 3,
+  "data_sha256": "380eee987e07f88a44b98eef8eb82a6d6cde5a8d621a10c3c316ac79691c3b3a",
+  "device": "cpu",
+  "elapsed_seconds_this_invocation": 2.419332981109619,
+  "fingerprint": "656759306b521862d4879764d837ea85e6c16950e7a120caf46a7f555ec61bc9",
+  "models": [
+    "ctabgan_plus",
+    "ctgan",
+    "dp_cgan"
+  ],
+  "non_thesis_result": false,
+  "plots": [
+    "plots\\rq1_fidelity.png",
+    "plots\\rq1_tails.png"
+  ],
+  "precision": "test-double",
+  "progress": "auto",
+  "seeds": [
+    42
+  ],
+  "smoke": false,
+  "split_seed": 42,
+  "started_at": "2026-08-18T14:16:23.439619+00:00",
+  "status": "complete"
+}

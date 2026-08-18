@@ -100,7 +100,54 @@ def compute_feature_components(
     )
 
 
-def compute_feature_priority(components: pd.DataFrame, variant: str, top_k: int = 5) -> pd.DataFrame:
+def correlation_groups(
+    frame: pd.DataFrame,
+    continuous_cols: Iterable[str],
+    threshold: float = 0.65,
+) -> Dict[str, str]:
+    """Return connected correlation components for group-aware feature selection."""
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("correlation threshold must lie within [0, 1]")
+    columns = [column for column in continuous_cols if column in frame]
+    correlations = frame[columns].apply(pd.to_numeric, errors="coerce").corr().abs()
+    parent = {column: column for column in columns}
+
+    def find(value: str) -> str:
+        while parent[value] != value:
+            parent[value] = parent[parent[value]]
+            value = parent[value]
+        return value
+
+    def union(left: str, right: str) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[max(left_root, right_root)] = min(left_root, right_root)
+
+    for left_index, left in enumerate(columns):
+        for right in columns[left_index + 1 :]:
+            value = correlations.loc[left, right]
+            if np.isfinite(value) and float(value) >= threshold:
+                union(left, right)
+    members: Dict[str, list[str]] = {}
+    for column in columns:
+        members.setdefault(find(column), []).append(column)
+    mapping = {}
+    for group in members.values():
+        label = "|".join(sorted(group))
+        for column in group:
+            mapping[column] = label
+    return mapping
+
+
+def compute_feature_priority(
+    components: pd.DataFrame,
+    variant: str,
+    top_k: int = 5,
+    *,
+    feature_groups: Mapping[str, str] | None = None,
+    max_per_group: int | None = None,
+    exclude_features: Iterable[str] = (),
+) -> pd.DataFrame:
     required = {"feature", "shap", "mismatch", "tail"}
     if not required.issubset(components.columns):
         raise ValueError(f"components must contain {sorted(required)}")
@@ -116,7 +163,22 @@ def compute_feature_priority(components: pd.DataFrame, variant: str, top_k: int 
 
     result = components.copy()
     result["combined_raw"] = combined
-    order = result.sort_values("combined_raw", ascending=False, kind="mergesort").index[: max(0, top_k)]
+    excluded = set(exclude_features)
+    result["selection_group"] = result["feature"].map(
+        lambda feature: (feature_groups or {}).get(feature, feature)
+    )
+    result["excluded_from_selection"] = result["feature"].isin(excluded)
+    candidates = result.sort_values("combined_raw", ascending=False, kind="mergesort")
+    order = []
+    group_counts: Dict[str, int] = {}
+    for index, row in candidates.iterrows():
+        if row["feature"] in excluded or len(order) >= max(0, top_k):
+            continue
+        group = str(row["selection_group"])
+        if max_per_group is not None and group_counts.get(group, 0) >= max_per_group:
+            continue
+        order.append(index)
+        group_counts[group] = group_counts.get(group, 0) + 1
     result["selected"] = False
     result.loc[order, "selected"] = True
     selected_sum = float(result.loc[order, "combined_raw"].sum())

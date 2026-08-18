@@ -25,9 +25,10 @@ from .mixed_utility import (
     evaluate_real_only_baseline,
     summarize_mixed_utility,
 )
-from .priority_diagnostics import prioritized_feature_diagnostics
+from .priority_diagnostics import feature_exclusion_sensitivity, prioritized_feature_diagnostics
 from .scoring import (
     build_region_definitions,
+    correlation_groups,
     compute_feature_components,
     compute_feature_priority,
     compute_row_weights,
@@ -171,6 +172,9 @@ def _save_training_artifacts(model, variant: str, output_dir: Path) -> Dict[str,
         item["feature"] = columns[index] if 0 <= index < len(columns) else None
         mixture.append(item)
     atomic_write_json(output_dir / f"mixture_diagnostics_{variant}.json", mixture)
+    decimals = getattr(model, "decimals", None)
+    if decimals:
+        atomic_write_json(output_dir / f"measurement_precision_{variant}.json", decimals)
     diagnostics["mixture_all_converged"] = all(
         item.get("converged", False) for item in mixture
     )
@@ -225,6 +229,7 @@ def run_experiment(
         config["detector"]["shap_max_rows"] = 100
         config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
         config.setdefault("priority_diagnostics", {})["n_estimators"] = 20
+        config.setdefault("feature_exclusion_sensitivity", {})["n_estimators"] = 20
         config.setdefault("evaluation", {})["n_estimators"] = 20
         mixed_smoke = config.setdefault("mixed_utility", {})
         mixed_smoke["repeats"] = 1
@@ -321,7 +326,13 @@ def run_experiment(
             baseline_model, splits.train, "A0", output_dir
         )
         baseline_audit = baseline_model.sample(len(splits.audit))
+        raw_audit = getattr(baseline_model, "last_raw_sample", None)
+        if raw_audit is not None:
+            atomic_write_csv(output_dir / "baseline_synthetic_audit_raw.csv", raw_audit)
         baseline_eval = baseline_model.sample(len(splits.train))
+        raw_eval = getattr(baseline_model, "last_raw_sample", None)
+        if raw_eval is not None:
+            atomic_write_csv(output_dir / "synthetic_raw_A0.csv", raw_eval)
         atomic_write_csv(baseline_audit_path, baseline_audit)
         atomic_write_csv(baseline_eval_path, baseline_eval)
 
@@ -386,8 +397,25 @@ def run_experiment(
 
     weighting = {"alpha": 2.0, "gamma": 0.5, "top_k": 5, "w_max": 3.0}
     weighting.update(config.get("weighting", {}))
+    group_mapping = correlation_groups(
+        splits.audit,
+        continuous,
+        float(weighting.get("correlation_threshold", 0.65)),
+    )
+    atomic_write_json(output_dir / "priority_correlation_groups.json", group_mapping)
     priorities = {
-        variant: compute_feature_priority(components, variant, int(weighting["top_k"]))
+        variant: compute_feature_priority(
+            components,
+            variant,
+            int(weighting["top_k"]),
+            feature_groups=group_mapping if weighting.get("correlation_aware_selection", True) else None,
+            max_per_group=(
+                int(weighting.get("max_per_correlation_group", 1))
+                if weighting.get("correlation_aware_selection", True)
+                else None
+            ),
+            exclude_features=weighting.get("exclude_features", []),
+        )
         for variant in ("A2", "A4", "A5")
     }
     for variant, priority in priorities.items():
@@ -440,6 +468,27 @@ def run_experiment(
             ],
         },
     )
+    exclusion_cfg = config.get("feature_exclusion_sensitivity", {})
+    if exclusion_cfg.get("enabled", True):
+        detector_sensitivity, utility_sensitivity = feature_exclusion_sensitivity(
+            splits.audit,
+            baseline_audit,
+            real_eval,
+            baseline_eval,
+            priorities,
+            group_mapping,
+            config["categorical_cols"],
+            utility_tasks,
+            seed=seed,
+            n_estimators=int(exclusion_cfg.get("n_estimators", 100)),
+            n_jobs=int(config.get("n_jobs", -1)),
+        )
+        atomic_write_csv(
+            output_dir / "feature_family_detector_sensitivity.csv", detector_sensitivity
+        )
+        atomic_write_csv(
+            output_dir / "feature_family_utility_sensitivity.csv", utility_sensitivity
+        )
     mixed_cfg = config.get("mixed_utility", {})
     mixed_enabled = bool(mixed_cfg.get("enabled", False))
     mixed_results: List[pd.DataFrame] = []
@@ -526,6 +575,9 @@ def run_experiment(
                 model, retrain, variant, output_dir
             )
             synthetic = model.sample(len(splits.train))
+            raw_synthetic = getattr(model, "last_raw_sample", None)
+            if raw_synthetic is not None:
+                atomic_write_csv(output_dir / f"synthetic_raw_{variant}.csv", raw_synthetic)
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 

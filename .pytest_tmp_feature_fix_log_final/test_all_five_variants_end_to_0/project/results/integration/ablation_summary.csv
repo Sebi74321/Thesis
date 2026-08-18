@@ -1,0 +1,6 @@
+score,variant,training_rows,synthetic_rows,training_stability_status,training_warning_unstable_tail,mixture_all_converged,weight_mean,weight_fraction_capped,comparison,vs_previous_delta_score,vs_previous_delta_training_rows,vs_previous_delta_synthetic_rows,vs_previous_delta_mixture_all_converged,vs_previous_delta_weight_mean,vs_previous_delta_weight_fraction_capped
+1.0,A0,60,60,unavailable,,True,,,,,,,,,
+1.0,A1,75,60,unavailable,,True,,,A1-A0,0.0,15.0,0.0,0.0,,
+1.0,A2,75,60,unavailable,,True,1.1999999999999997,0.15,A2-A1,0.0,0.0,0.0,0.0,,
+1.0,A4,75,60,unavailable,,True,1.1523809523809523,0.0,A4-A2,0.0,0.0,0.0,0.0,-0.04761904761904745,-0.15
+1.0,A5,75,60,unavailable,,True,1.2,0.15,A5-A4,0.0,0.0,0.0,0.0,0.04761904761904767,0.15

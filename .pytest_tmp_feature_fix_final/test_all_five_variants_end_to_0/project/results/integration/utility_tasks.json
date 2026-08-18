@@ -1,0 +1,21 @@
+{
+  "decision_rule": "random_forest_argmax",
+  "tasks": [
+    {
+      "balance": "imbalanced",
+      "evaluation_class_frequencies": {
+        "0": 0.8,
+        "1": 0.2
+      },
+      "name": "mortality",
+      "positive_label": "1",
+      "target_col": "target",
+      "task_type": "classification",
+      "train_class_frequencies": {
+        "0": 0.8,
+        "1": 0.2
+      }
+    }
+  ],
+  "threshold_tuning": false
+}

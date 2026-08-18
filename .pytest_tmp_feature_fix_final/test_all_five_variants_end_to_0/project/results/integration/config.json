@@ -1,0 +1,43 @@
+{
+  "categorical_cols": [
+    "category",
+    "target"
+  ],
+  "continuous_cols": [
+    "continuous"
+  ],
+  "data_path": "data/input.csv",
+  "device": "cpu",
+  "frozen": false,
+  "generator": {},
+  "mixed_utility": {
+    "additive_fractions": [
+      0.0,
+      1.0
+    ],
+    "enabled": true,
+    "n_estimators": 5,
+    "repeats": 1,
+    "replacement_fractions": [
+      0.0,
+      1.0
+    ]
+  },
+  "seed": 42,
+  "smoke": false,
+  "stage": "val",
+  "target_col": "target",
+  "variants": [
+    "A0",
+    "A1",
+    "A2",
+    "A4",
+    "A5"
+  ],
+  "weighting": {
+    "alpha": 1.0,
+    "gamma": 0.25,
+    "top_k": 2,
+    "w_max": 2.0
+  }
+}

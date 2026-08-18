@@ -34,6 +34,11 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert tasks["gender"]["target_col"] == "gender"
     assert tasks["gender"]["positive_label"] == "F"
     assert tasks["gender"]["balance"] == "balanced"
+    weighting = config["weighting"]
+    assert weighting["correlation_aware_selection"] is True
+    assert weighting["correlation_threshold"] == 0.65
+    assert weighting["max_per_correlation_group"] == 1
+    assert config["feature_exclusion_sensitivity"]["enabled"] is True
 
 
 def test_mimic_age_is_general_and_integer():
@@ -43,6 +48,8 @@ def test_mimic_age_is_general_and_integer():
 
     assert "age_at_intime" in config["generator"]["general_columns"]
     assert "age_at_intime" in config["generator"]["integer_columns"]
+    assert config["generator"]["mixed_columns"]["spo2_max"] == [100.0]
+    assert set(config["generator"]["log_columns"]) == {"wbc_min", "wbc_max"}
 
 
 def test_wids_large_dataset_settings():

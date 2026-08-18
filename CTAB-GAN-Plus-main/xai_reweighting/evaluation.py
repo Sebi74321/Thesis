@@ -167,11 +167,15 @@ def evaluate_utility(
     categorical_cols: Iterable[str],
     positive_label: str,
     metric_prefix: str = "utility_",
+    exclude_predictors: Iterable[str] = (),
     seed: int = 42,
     n_estimators: int = 300,
     n_jobs: int = -1,
 ) -> Dict[str, float]:
-    predictors = [c for c in real_eval.columns if c != target_col]
+    excluded = set(exclude_predictors)
+    predictors = [c for c in real_eval.columns if c != target_col and c not in excluded]
+    if not predictors:
+        raise ValueError("Utility evaluation requires at least one predictor")
     X_syn, y_syn = synthetic[predictors].copy(), _cat(synthetic[target_col])
     X_real, y_real = real_eval[predictors].copy(), _cat(real_eval[target_col])
     for column in categorical_cols:

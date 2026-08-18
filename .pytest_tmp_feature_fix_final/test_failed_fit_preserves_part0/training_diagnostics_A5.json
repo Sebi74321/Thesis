@@ -1,0 +1,19 @@
+{
+  "epochs_completed": 1,
+  "losses": {
+    "generator": {
+      "final": 2.0,
+      "initial": 2.0,
+      "max_absolute": 2.0,
+      "tail_mean": 2.0,
+      "tail_relative_std": 0.0,
+      "tail_slope_per_epoch": 0.0,
+      "tail_std": 0.0
+    }
+  },
+  "mixture_all_converged": true,
+  "status": "no_instability_detected",
+  "tail_epochs": 1,
+  "warning_extreme_loss": false,
+  "warning_unstable_tail": false
+}

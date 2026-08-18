@@ -5,6 +5,7 @@ from xai_reweighting.scoring import (
     build_region_definitions,
     compute_feature_components,
     compute_feature_priority,
+    correlation_groups,
     compute_row_weights,
     normalize_signal,
 )
@@ -72,3 +73,38 @@ def test_target_minority_is_included_in_tail_score_above_five_percent():
         real, synthetic, {"target": 0.0}, ["target"], [], target_col="target"
     ).set_index("feature")
     assert result.loc["target", "tail_raw"] > 0
+
+
+def test_group_aware_priority_avoids_correlated_duplicates():
+    frame = pd.DataFrame(
+        {
+            "spo2_min": np.arange(20, dtype=float),
+            "spo2_max": np.arange(20, dtype=float) + 1,
+            "wbc": np.array([0, 1, 4, 2, 5] * 4, dtype=float),
+        }
+    )
+    groups = correlation_groups(frame, frame.columns, threshold=0.95)
+    components = pd.DataFrame(
+        {
+            "feature": ["spo2_min", "spo2_max", "wbc"],
+            "shap": [1.0, 0.9, 0.1],
+            "mismatch": [1.0, 0.9, 0.8],
+            "tail": [0.0, 0.0, 0.0],
+        }
+    )
+    priority = compute_feature_priority(
+        components, "A2", top_k=2, feature_groups=groups, max_per_group=1
+    )
+    selected = set(priority.loc[priority["selected"], "feature"])
+
+    assert selected == {"spo2_min", "wbc"}
+    assert groups["spo2_min"] == groups["spo2_max"]
+
+
+def test_priority_exclusion_is_explicit_and_preserves_top_k_when_possible():
+    priority = compute_feature_priority(
+        _components(1.0), "A5", top_k=2, exclude_features=["x"]
+    )
+    assert not bool(priority.set_index("feature").loc["x", "selected"])
+    assert bool(priority.set_index("feature").loc["x", "excluded_from_selection"])
+    assert priority["selected"].sum() == 2

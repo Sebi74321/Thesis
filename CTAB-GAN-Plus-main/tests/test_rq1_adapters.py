@@ -1,11 +1,18 @@
 import sys
 import types
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
 
-from xai_reweighting.generator_adapters import CTGANAdapter, DPCGANAdapter, create_generator
+from model.pipeline.data_preparation import DataPrep
+from xai_reweighting.generator_adapters import (
+    CTGANAdapter,
+    DPCGANAdapter,
+    _decimal_places,
+    create_generator,
+)
 
 
 class FakeCTGAN:
@@ -106,3 +113,21 @@ def test_dp_adapter_rejects_non_private_mode(tmp_path):
 def test_registry_validates_model_name():
     with pytest.raises(ValueError, match="Unknown generator"):
         create_generator("unknown", {}, device=torch.device("cpu"), seed=42)
+
+
+def test_measurement_precision_inference_distinguishes_grids_from_continuous_values():
+    one_decimal = pd.Series([0.1, 0.2, 1.5, 7.9] * 30, dtype=float)
+    integer_float = pd.Series([97.0, 98.0, 99.0, 100.0] * 30, dtype=float)
+    continuous = pd.Series(np.linspace(0.1234567, 0.9876543, 120), dtype=float)
+
+    assert _decimal_places(one_decimal) == 1
+    assert _decimal_places(integer_float) == 0
+    assert _decimal_places(continuous) > 1
+
+
+def test_positive_log_columns_round_trip_through_data_prep():
+    frame = pd.DataFrame({"wbc": [0.1, 1.0, 10.0, 100.0]})
+    prep = DataPrep(frame.copy(), [], ["wbc"], {}, ["wbc"], [], [], {None: None}, 0.0)
+    restored = prep.inverse_prep(prep.df.to_numpy(copy=True))
+
+    np.testing.assert_allclose(restored["wbc"], frame["wbc"], rtol=1e-7, atol=1e-9)

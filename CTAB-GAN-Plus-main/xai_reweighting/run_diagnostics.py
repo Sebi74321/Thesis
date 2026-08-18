@@ -10,7 +10,8 @@ import pandas as pd
 
 from .diagnostics import baseline_detector_diagnostics
 from .io_utils import atomic_write_csv, file_sha256
-from .priority_diagnostics import prioritized_feature_diagnostics
+from .priority_diagnostics import feature_exclusion_sensitivity, prioritized_feature_diagnostics
+from .scoring import correlation_groups
 
 
 def run_existing_diagnostics(
@@ -94,6 +95,28 @@ def run_existing_diagnostics(
         atomic_write_csv(run_dir / "prioritized_feature_value_spikes.csv", spikes)
         atomic_write_csv(run_dir / "prioritized_feature_detector_ablation.csv", ablation)
         atomic_write_csv(run_dir / "prioritized_feature_correlations.csv", correlations)
+        stage = str(manifest.get("stage", "val"))
+        eval_name = stage if stage in {"val", "test"} else "val"
+        real_eval = data.iloc[indices[eval_name]].copy(deep=True).reset_index(drop=True)
+        synthetic_eval = pd.read_csv(run_dir / "synthetic_A0.csv")
+        weighting = config.get("weighting", {})
+        groups = correlation_groups(
+            real_audit, continuous, float(weighting.get("correlation_threshold", 0.65))
+        )
+        utility_tasks = config.get("utility_tasks") or [
+            {"name": "mortality", "balance": "imbalanced", "target_col": config["target_col"], "positive_label": "1"},
+            {"name": "gender", "balance": "balanced", "target_col": "gender", "positive_label": "F"},
+        ]
+        sensitivity_config = config.get("feature_exclusion_sensitivity", {})
+        detector_sensitivity, utility_sensitivity = feature_exclusion_sensitivity(
+            real_audit, synthetic_audit, real_eval, synthetic_eval, priorities, groups,
+            config["categorical_cols"], utility_tasks,
+            seed=int(config.get("seed", 42)),
+            n_estimators=int(sensitivity_config.get("n_estimators", 100)),
+            n_jobs=int(config.get("n_jobs", -1)),
+        )
+        atomic_write_csv(run_dir / "feature_family_detector_sensitivity.csv", detector_sensitivity)
+        atomic_write_csv(run_dir / "feature_family_utility_sensitivity.csv", utility_sensitivity)
     return run_dir
 
 

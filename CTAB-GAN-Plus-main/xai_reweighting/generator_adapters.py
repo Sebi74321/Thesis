@@ -11,6 +11,7 @@ import sys
 from typing import Any, Dict, Mapping, Optional
 import warnings
 
+import numpy as np
 import pandas as pd
 import torch
 from pandas.api.types import is_bool_dtype, is_float_dtype, is_numeric_dtype
@@ -56,9 +57,17 @@ def _restore_schema(result: pd.DataFrame, columns, dtypes) -> pd.DataFrame:
     return result
 
 
-def _decimal_places(series: pd.Series) -> int:
+def _decimal_places(series: pd.Series, coverage: float = 0.99, max_places: int = 6) -> int:
+    """Infer measurement precision without forcing genuinely continuous columns onto a grid."""
     if not is_float_dtype(series.dtype):
         return 0
+    numeric = pd.to_numeric(series, errors="coerce").dropna().to_numpy(dtype=float)
+    if len(numeric):
+        for places in range(max_places + 1):
+            rounded = np.round(numeric, places)
+            tolerance = max(1e-10, 10.0 ** (-(places + 7)))
+            if float(np.mean(np.abs(numeric - rounded) <= tolerance)) >= coverage:
+                return places
     maximum = 0
     for value in series.dropna().astype(str):
         mantissa = value.lower().split("e", 1)[0]
@@ -153,6 +162,8 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         self.allow_tf32 = bool(allow_tf32)
         self.columns = None
         self.dtypes = None
+        self.decimals = {}
+        self.last_raw_sample = None
         self.data_prep = None
         self.synthesizer = None
         self.discriminator_snapshots = []
@@ -167,6 +178,7 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         train_df = df.copy(deep=True).reset_index(drop=True)
         self.columns = train_df.columns.tolist()
         self.dtypes = train_df.dtypes.to_dict()
+        self.decimals = {column: _decimal_places(train_df[column]) for column in self.columns}
 
         # Passing a null problem type prevents DataPrep from performing its
         # legacy split. The real problem type is still supplied to the
@@ -211,6 +223,10 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         self._sample_calls += 1
         encoded = self.synthesizer.sample(n)
         result = self.data_prep.inverse_prep(encoded).loc[:, self.columns].reset_index(drop=True)
+        self.last_raw_sample = result.copy(deep=True)
+        for column, decimals in self.decimals.items():
+            if column in result and is_numeric_dtype(self.dtypes[column]):
+                result[column] = pd.to_numeric(result[column], errors="raise").round(decimals)
         result = _restore_schema(result, self.columns, self.dtypes)
         if len(result) != n:
             raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
@@ -226,6 +242,7 @@ class CTABGANPlusAdapter(GeneratorAdapter):
                 "synthesizer_kwargs": self.synthesizer_kwargs,
                 "columns": self.columns,
                 "dtypes": {key: str(value) for key, value in self.dtypes.items()},
+                "measurement_decimals": self.decimals,
             },
             path,
         )

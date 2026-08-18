@@ -10,6 +10,7 @@ from scipy.stats import chi2_contingency, ks_2samp, wasserstein_distance
 
 from .detector import train_detector
 from .diagnostics import _categorical, _js_distance, _scale
+from .evaluation import evaluate_utility
 
 
 def _target_association(frame: pd.DataFrame, feature: str, target: str, categorical: bool) -> float:
@@ -282,3 +283,109 @@ def prioritized_feature_diagnostics(
         detector,
         pd.DataFrame(correlation_rows),
     )
+
+
+def feature_exclusion_sensitivity(
+    real_audit: pd.DataFrame,
+    synthetic_audit: pd.DataFrame,
+    real_eval: pd.DataFrame,
+    synthetic_eval: pd.DataFrame,
+    priorities: Mapping[str, pd.DataFrame],
+    feature_groups: Mapping[str, str],
+    categorical_cols: Iterable[str],
+    utility_tasks: Iterable[Mapping[str, str]],
+    *,
+    seed: int = 42,
+    n_estimators: int = 100,
+    n_jobs: int = -1,
+    detector_fn: Callable = train_detector,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Measure detector and utility sensitivity when selected feature families are ignored."""
+    selected = sorted({
+        str(feature)
+        for priority in priorities.values()
+        for feature in priority.loc[priority["selected"].astype(bool), "feature"]
+    })
+    grouped: dict[str, set[str]] = {}
+    for feature in selected:
+        label = feature_groups.get(feature, feature)
+        grouped.setdefault(label, set()).update(
+            candidate for candidate, group in feature_groups.items() if group == label
+        )
+        grouped[label].add(feature)
+    exclusion_sets: list[tuple[str, list[str]]] = [("none", [])]
+    exclusion_sets.extend(
+        (f"family:{label}", sorted(features)) for label, features in sorted(grouped.items())
+    )
+    exclusion_sets.append(("all_selected", selected))
+
+    detector_rows = []
+    full_auc = None
+    for label, excluded in exclusion_sets:
+        remaining = [column for column in real_audit if column not in set(excluded)]
+        if remaining:
+            result = detector_fn(
+                real_audit[remaining], synthetic_audit[remaining],
+                [column for column in categorical_cols if column in remaining],
+                seed=seed, n_estimators=n_estimators, compute_shap=False, n_jobs=n_jobs,
+            )
+            auc = float(result.metrics["detector_auc"])
+            status = "ok"
+        else:
+            auc = float("nan")
+            status = "no_features_remaining"
+        if label == "none":
+            full_auc = auc
+        detector_rows.append({
+            "exclusion": label,
+            "excluded_features": "|".join(excluded),
+            "excluded_feature_count": len(excluded),
+            "detector_auc": auc,
+            "detector_auc_drop_vs_none": float(full_auc - auc) if full_auc is not None else 0.0,
+            "status": status,
+        })
+
+    utility_rows = []
+    for task in utility_tasks:
+        task_baseline = None
+        task_rows = []
+        for label, excluded in exclusion_sets:
+            try:
+                metrics = evaluate_utility(
+                    synthetic_eval, real_eval, str(task["target_col"]), categorical_cols,
+                    str(task["positive_label"]), metric_prefix="", exclude_predictors=excluded,
+                    seed=seed, n_estimators=n_estimators, n_jobs=n_jobs,
+                )
+                status = "ok"
+            except ValueError as exc:
+                if "at least one predictor" not in str(exc):
+                    raise
+                metrics = {
+                    "target": task["target_col"], "positive_label": task["positive_label"],
+                    "decision_rule": "unavailable", **{
+                        metric: float("nan") for metric in (
+                            "roc_auc", "pr_auc", "accuracy", "balanced_accuracy",
+                            "precision_macro", "recall_macro", "f1_macro",
+                            "positive_precision", "positive_recall", "positive_f1",
+                        )
+                    },
+                }
+                status = "no_predictors_remaining"
+            row = {
+                "utility_task": task["name"],
+                "target_balance": task.get("balance", "unspecified"),
+                "exclusion": label,
+                "excluded_features": "|".join(excluded),
+                "excluded_feature_count": len(excluded),
+                "status": status,
+                **metrics,
+            }
+            if label == "none":
+                task_baseline = row.copy()
+            task_rows.append(row)
+        for row in task_rows:
+            if task_baseline is not None:
+                for metric in ("roc_auc", "pr_auc", "accuracy", "balanced_accuracy", "f1_macro", "positive_recall"):
+                    row[f"delta_{metric}_vs_none"] = float(row[metric] - task_baseline[metric])
+            utility_rows.append(row)
+    return pd.DataFrame(detector_rows), pd.DataFrame(utility_rows)

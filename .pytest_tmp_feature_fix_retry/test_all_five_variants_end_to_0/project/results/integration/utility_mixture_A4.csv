@@ -1,0 +1,5 @@
+protocol,utility_task,target_balance,synthetic_fraction,synthetic_share_of_training,repeat,seed,real_training_rows,synthetic_training_rows,training_rows,target_col,positive_label,decision_rule,roc_auc,pr_auc,accuracy,balanced_accuracy,precision_macro,recall_macro,f1_macro,positive_precision,positive_recall,positive_f1,variant
+additive,mortality,imbalanced,0.0,0.0,0,42,60,0,60,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,A4
+additive,mortality,imbalanced,1.0,0.5,0,42,60,60,120,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,A4
+replacement,mortality,imbalanced,0.0,0.0,0,42,60,0,60,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,A4
+replacement,mortality,imbalanced,1.0,1.0,0,42,0,60,60,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,A4
