@@ -1,0 +1,14 @@
+{
+  "convergence_warning_count": 0,
+  "dataset": "test",
+  "detector_auc": 0.5,
+  "model": "ctabgan_plus",
+  "rq1_joint_rare_region_mass_error": 0.0,
+  "seed": 42,
+  "stage": "val",
+  "synthetic_rows": 60,
+  "training_rows": 60,
+  "training_seconds": 0.1686258316040039,
+  "training_stability_status": "no_instability_detected",
+  "utility_roc_auc": 0.5
+}

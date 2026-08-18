@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .data_split import create_data_splits
-from .evaluation import evaluate_variant
+from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
     evaluate_mixed_utility_curve,
@@ -329,7 +329,6 @@ def run_model_comparison(
             raise ValueError("Persisted split indices do not match the reproducible split")
     atomic_write_json(split_path, splits.indices)
     real_eval = splits.val if stage == "val" else splits.test
-    threshold_real = splits.audit if stage == "val" else splits.val
     continuous = config.get(
         "continuous_cols", [column for column in data if column not in config["categorical_cols"]]
     )
@@ -346,6 +345,23 @@ def run_model_comparison(
     atomic_write_csv(output_dir / "real_real_reference_details.csv", reference_details)
 
     evaluation_cfg = config.get("evaluation", {})
+    utility_tasks = config.get("utility_tasks") or [{
+        "name": "mortality", "balance": "imbalanced",
+        "task_type": "classification", "target_col": config["target_col"],
+        "positive_label": "1",
+    }]
+    atomic_write_json(
+        output_dir / "utility_tasks.json",
+        {
+            "decision_rule": "random_forest_argmax",
+            "threshold_tuning": False,
+            "tasks": [{
+                **task,
+                "train_class_frequencies": _cat(splits.train[task["target_col"]]).value_counts(normalize=True).to_dict(),
+                "evaluation_class_frequencies": _cat(real_eval[task["target_col"]]).value_counts(normalize=True).to_dict(),
+            } for task in utility_tasks],
+        },
+    )
     mixed_cfg = config.get("mixed_utility", {})
     mixed_enabled = bool(mixed_cfg.get("enabled", True))
     if smoke:
@@ -365,19 +381,19 @@ def run_model_comparison(
         if resume and real_only_path.exists():
             real_only = pd.read_csv(real_only_path)
         else:
-            real_only = evaluate_real_only_baseline(
-                splits.train,
-                threshold_real,
-                real_eval,
-                config["target_col"],
-                config["categorical_cols"],
-                repeats=int(mixed_cfg.get("repeats", 3)),
-                seed=split_seed,
-                n_estimators=int(mixed_cfg.get("n_estimators", 300)),
-                n_jobs=int(config.get("n_jobs", -1)),
-                threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
-                progress=progress,
-            )
+            real_only_frames = []
+            for task in utility_tasks:
+                task_frame = evaluate_real_only_baseline(
+                    splits.train, real_eval, task["target_col"], config["categorical_cols"],
+                    positive_label=str(task["positive_label"]),
+                    repeats=int(mixed_cfg.get("repeats", 3)), seed=split_seed,
+                    n_estimators=int(mixed_cfg.get("n_estimators", 300)),
+                    n_jobs=int(config.get("n_jobs", -1)), progress=progress,
+                )
+                task_frame.insert(0, "utility_task", task["name"])
+                task_frame.insert(1, "target_balance", task.get("balance", "unspecified"))
+                real_only_frames.append(task_frame)
+            real_only = pd.concat(real_only_frames, ignore_index=True)
             atomic_write_csv(real_only_path, real_only)
 
     rows: list[dict[str, Any]] = []
@@ -440,6 +456,7 @@ def run_model_comparison(
                 config["target_col"],
                 config["categorical_cols"],
                 continuous,
+                utility_tasks=utility_tasks,
                 seed=seed,
                 n_jobs=int(config.get("n_jobs", -1)),
                 n_estimators=int(evaluation_cfg.get("n_estimators", 300)),
@@ -485,24 +502,25 @@ def run_model_comparison(
                 if resume and mixed_path.exists():
                     mixed = pd.read_csv(mixed_path)
                 else:
-                    mixed = evaluate_mixed_utility_curve(
-                        model_name,
-                        splits.train,
-                        synthetic,
-                        threshold_real,
-                        real_eval,
-                        config["target_col"],
-                        config["categorical_cols"],
-                        real_only,
-                        additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
-                        replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
-                        repeats=int(mixed_cfg.get("repeats", 3)),
-                        seed=seed,
-                        n_estimators=int(mixed_cfg.get("n_estimators", 300)),
-                        n_jobs=int(config.get("n_jobs", -1)),
-                        threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
-                        progress=progress,
-                    )
+                    task_mixed = []
+                    for task in utility_tasks:
+                        baseline = real_only[real_only["utility_task"] == task["name"]].drop(
+                            columns=["utility_task", "target_balance"]
+                        )
+                        task_result = evaluate_mixed_utility_curve(
+                            model_name, splits.train, synthetic, real_eval,
+                            task["target_col"], config["categorical_cols"], baseline,
+                            positive_label=str(task["positive_label"]),
+                            additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
+                            replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
+                            repeats=int(mixed_cfg.get("repeats", 3)), seed=seed,
+                            n_estimators=int(mixed_cfg.get("n_estimators", 300)),
+                            n_jobs=int(config.get("n_jobs", -1)), progress=progress,
+                        )
+                        task_result.insert(1, "utility_task", task["name"])
+                        task_result.insert(2, "target_balance", task.get("balance", "unspecified"))
+                        task_mixed.append(task_result)
+                    mixed = pd.concat(task_mixed, ignore_index=True)
                     mixed.insert(1, "generator_seed", seed)
                     atomic_write_csv(mixed_path, mixed)
                 mixed_frames.append(mixed)

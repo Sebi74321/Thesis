@@ -6,6 +6,21 @@ Our new paper [TabuLa: Harnessing Language Models for Tabular Data Synthesis](ht
 This is the official git paper [CTAB-GAN+: Enhancing Tabular Data Synthesis](https://arxiv.org/abs/2204.00401). Current code is **WITHOUT** differential privacy part. The code with differential privacy is in this [github](https://github.com/Team-TUD/CTAB-GAN-Plus-DP). 
 If you have any question, please contact `z.zhao-8@tudelft.nl` for more information.
 
+## Thesis evaluation utility task
+
+The thesis runners evaluate two downstream classification tasks. Mortality is
+the imbalanced task and remains the GAN conditioning target. `gender` is the
+balanced companion task for both MIMIC and WiDS (approximately 53/47 and 54/46
+respectively). Results use separate `utility_mortality_*` and
+`utility_gender_*` metric namespaces.
+
+Utility evaluation is deliberately data agnostic: a class-balanced Random
+Forest uses its fixed argmax prediction rule. No threshold is selected on the
+audit, validation, or test split. Headline classification metrics are macro F1,
+macro precision/recall, balanced accuracy, accuracy, ROC-AUC, and PR-AUC. The
+configured positive label `F` is fixed before evaluation and is used only for
+ROC/PR and class-specific supplementary metrics.
+
 
 ## Prerequisite
 

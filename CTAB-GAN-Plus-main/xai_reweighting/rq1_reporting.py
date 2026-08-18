@@ -10,7 +10,16 @@ import pandas as pd
 
 
 PLOT_GROUPS = {
-    "utility": ["utility_roc_auc", "utility_pr_auc", "utility_recall", "rare_event_recall"],
+    "utility": [
+        "utility_mortality_roc_auc",
+        "utility_mortality_pr_auc",
+        "utility_mortality_f1_macro",
+        "utility_mortality_positive_recall",
+        "utility_gender_roc_auc",
+        "utility_gender_pr_auc",
+        "utility_gender_f1_macro",
+        "utility_gender_balanced_accuracy",
+    ],
     "fidelity": ["mean_wasserstein_scaled", "correlation_distance", "detector_auc"],
     "tails": [
         "mean_cdf_tail_divergence",

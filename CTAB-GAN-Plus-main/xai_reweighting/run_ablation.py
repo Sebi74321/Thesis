@@ -18,7 +18,7 @@ from .augmentation import create_uniform_augmentation, create_weighted_augmentat
 from .data_split import create_data_splits
 from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
-from .evaluation import evaluate_variant
+from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
     evaluate_mixed_utility_curve,
@@ -416,61 +416,84 @@ def run_experiment(
         atomic_write_csv(output_dir / "prioritized_feature_correlations.csv", priority_correlations)
 
     evaluation_cfg = config.get("evaluation", {})
+    utility_tasks = config.get("utility_tasks") or [
+        {
+            "name": "mortality",
+            "balance": "imbalanced",
+            "task_type": "classification",
+            "target_col": config["target_col"],
+            "positive_label": "1",
+        }
+    ]
+    atomic_write_json(
+        output_dir / "utility_tasks.json",
+        {
+            "decision_rule": "random_forest_argmax",
+            "threshold_tuning": False,
+            "tasks": [
+                {
+                    **task,
+                    "train_class_frequencies": _cat(splits.train[task["target_col"]]).value_counts(normalize=True).to_dict(),
+                    "evaluation_class_frequencies": _cat(real_eval[task["target_col"]]).value_counts(normalize=True).to_dict(),
+                }
+                for task in utility_tasks
+            ],
+        },
+    )
     mixed_cfg = config.get("mixed_utility", {})
     mixed_enabled = bool(mixed_cfg.get("enabled", False))
     mixed_results: List[pd.DataFrame] = []
     real_only_utility = pd.DataFrame()
     if mixed_enabled:
-        real_threshold = splits.audit if stage == "val" else splits.val
         real_only_path = output_dir / "utility_real_only_baseline.csv"
         if resume and real_only_path.exists():
             real_only_utility = pd.read_csv(real_only_path)
         else:
-            real_only_utility = evaluate_real_only_baseline(
-                splits.train,
-                real_threshold,
-                real_eval,
-                config["target_col"],
-                config["categorical_cols"],
-                repeats=int(mixed_cfg.get("repeats", 3)),
-                seed=seed,
-                n_estimators=int(
-                    mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
-                ),
-                n_jobs=int(config.get("n_jobs", -1)),
-                threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
-                progress=progress,
-            )
+            task_frames = []
+            for task in utility_tasks:
+                task_frame = evaluate_real_only_baseline(
+                    splits.train,
+                    real_eval,
+                    task["target_col"],
+                    config["categorical_cols"],
+                    positive_label=str(task["positive_label"]),
+                    repeats=int(mixed_cfg.get("repeats", 3)),
+                    seed=seed,
+                    n_estimators=int(
+                        mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
+                    ),
+                    n_jobs=int(config.get("n_jobs", -1)),
+                    progress=progress,
+                )
+                task_frame.insert(0, "utility_task", task["name"])
+                task_frame.insert(1, "target_balance", task.get("balance", "unspecified"))
+                task_frames.append(task_frame)
+            real_only_utility = pd.concat(task_frames, ignore_index=True)
             atomic_write_csv(real_only_path, real_only_utility)
 
     def mixed_utility_for_variant(variant: str, synthetic: pd.DataFrame) -> pd.DataFrame:
         path = output_dir / f"utility_mixture_{variant}.csv"
         if resume and path.exists():
             return pd.read_csv(path)
-        result = evaluate_mixed_utility_curve(
-            variant,
-            splits.train,
-            synthetic,
-            real_threshold,
-            real_eval,
-            config["target_col"],
-            config["categorical_cols"],
-            real_only_utility,
-            additive_fractions=mixed_cfg.get(
-                "additive_fractions", [0.0, 0.25, 0.5, 1.0]
-            ),
-            replacement_fractions=mixed_cfg.get(
-                "replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]
-            ),
-            repeats=int(mixed_cfg.get("repeats", 3)),
-            seed=seed,
-            n_estimators=int(
-                mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
-            ),
-            n_jobs=int(config.get("n_jobs", -1)),
-            threshold_beta=float(mixed_cfg.get("threshold_beta", 2.0)),
-            progress=progress,
-        )
+        task_results = []
+        for task in utility_tasks:
+            task_baseline = real_only_utility[
+                real_only_utility["utility_task"] == task["name"]
+            ].drop(columns=["utility_task", "target_balance"])
+            result = evaluate_mixed_utility_curve(
+                variant, splits.train, synthetic, real_eval, task["target_col"],
+                config["categorical_cols"], task_baseline,
+                positive_label=str(task["positive_label"]),
+                additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
+                replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
+                repeats=int(mixed_cfg.get("repeats", 3)), seed=seed,
+                n_estimators=int(mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))),
+                n_jobs=int(config.get("n_jobs", -1)), progress=progress,
+            )
+            result.insert(1, "utility_task", task["name"])
+            result.insert(2, "target_balance", task.get("balance", "unspecified"))
+            task_results.append(result)
+        result = pd.concat(task_results, ignore_index=True)
         atomic_write_csv(path, result)
         return result
 
@@ -513,8 +536,9 @@ def run_experiment(
             config["target_col"],
             config["categorical_cols"],
             continuous,
-            seed,
-            int(config.get("n_jobs", -1)),
+            utility_tasks=utility_tasks,
+            seed=seed,
+            n_jobs=int(config.get("n_jobs", -1)),
             n_estimators=int(evaluation_cfg.get("n_estimators", 300)),
             privacy_max_reference_rows=evaluation_cfg.get("privacy_max_reference_rows"),
             privacy_max_query_rows=evaluation_cfg.get("privacy_max_query_rows"),
@@ -567,8 +591,12 @@ def run_experiment(
         atomic_write_json(
             output_dir / "utility_mixture_manifest.json",
             {
-                "threshold_split": "audit" if stage == "val" else "val",
                 "evaluation_split": stage,
+                "utility_tasks": utility_tasks,
+                "utility_protocol": {
+                    "decision_rule": "random_forest_argmax",
+                    "threshold_tuning": False,
+                },
                 "variants": variants,
                 "additive_fractions": mixed_cfg.get(
                     "additive_fractions", [0.0, 0.25, 0.5, 1.0]
@@ -582,7 +610,6 @@ def run_experiment(
                         "n_estimators", evaluation_cfg.get("n_estimators", 300)
                     )
                 ),
-                "threshold_beta": float(mixed_cfg.get("threshold_beta", 2.0)),
                 "fraction_semantics": {
                     "additive": "synthetic rows divided by len(real_train)",
                     "replacement": "synthetic rows divided by fixed total training rows",

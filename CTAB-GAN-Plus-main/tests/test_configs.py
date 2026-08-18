@@ -26,7 +26,14 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert mixed["enabled"] is True
     assert mixed["additive_fractions"][0] == 0.0
     assert mixed["replacement_fractions"] == [0.0, 0.25, 0.5, 0.75, 1.0]
-    assert mixed["threshold_beta"] == 2.0
+    assert "threshold_beta" not in mixed
+    tasks = {task["name"]: task for task in config["utility_tasks"]}
+    assert set(tasks) == {"mortality", "gender"}
+    assert tasks["mortality"]["target_col"] == config["target_col"]
+    assert tasks["mortality"]["balance"] == "imbalanced"
+    assert tasks["gender"]["target_col"] == "gender"
+    assert tasks["gender"]["positive_label"] == "F"
+    assert tasks["gender"]["balance"] == "balanced"
 
 
 def test_mimic_age_is_general_and_integer():

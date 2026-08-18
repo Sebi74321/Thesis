@@ -1,0 +1,11 @@
+{
+  "mixture_all_converged": true,
+  "score": 1.0,
+  "synthetic_rows": 60,
+  "training_rows": 75,
+  "training_stability_status": "unavailable",
+  "training_warning_unstable_tail": null,
+  "variant": "A2",
+  "weight_fraction_capped": 0.15,
+  "weight_mean": 1.1999999999999997
+}

@@ -1,0 +1,5 @@
+comparison,variant,control,delta_score,delta_training_rows,delta_synthetic_rows,delta_mixture_all_converged,delta_weight_mean,delta_weight_fraction_capped
+A1-A0,A1,A0,0.0,15,0,0,,
+A2-A1,A2,A1,0.0,0,0,0,,
+A4-A2,A4,A2,0.0,0,0,0,-0.04761904761904745,-0.15
+A5-A4,A5,A4,0.0,0,0,0,0.04761904761904767,0.15

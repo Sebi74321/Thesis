@@ -45,7 +45,6 @@ def run_existing_mixed_utility(
     stage = config.get("stage", "val")
     if stage not in {"val", "test"}:
         raise ValueError(f"Unknown run stage: {stage}")
-    real_threshold = take("audit" if stage == "val" else "val")
     real_eval = take(stage)
     mixed_cfg = config.get("mixed_utility", {})
     evaluation_cfg = config.get("evaluation", {})
@@ -57,21 +56,22 @@ def run_existing_mixed_utility(
     )
     jobs = int(n_jobs if n_jobs is not None else config.get("n_jobs", -1))
     seed = int(config.get("seed", 42))
-    beta = float(mixed_cfg.get("threshold_beta", 2.0))
+    utility_tasks = config.get("utility_tasks") or [
+        {"name": "mortality", "balance": "imbalanced", "target_col": config["target_col"], "positive_label": "1"},
+        {"name": "gender", "balance": "balanced", "target_col": "gender", "positive_label": "F"},
+    ]
 
-    real_only = evaluate_real_only_baseline(
-        real_train,
-        real_threshold,
-        real_eval,
-        config["target_col"],
-        config["categorical_cols"],
-        repeats=repeat_count,
-        seed=seed,
-        n_estimators=tree_count,
-        n_jobs=jobs,
-        threshold_beta=beta,
-        progress=progress,
-    )
+    baseline_frames = []
+    for task in utility_tasks:
+        baseline = evaluate_real_only_baseline(
+            real_train, real_eval, task["target_col"], config["categorical_cols"],
+            positive_label=str(task["positive_label"]), repeats=repeat_count,
+            seed=seed, n_estimators=tree_count, n_jobs=jobs, progress=progress,
+        )
+        baseline.insert(0, "utility_task", task["name"])
+        baseline.insert(1, "target_balance", task.get("balance", "unspecified"))
+        baseline_frames.append(baseline)
+    real_only = pd.concat(baseline_frames, ignore_index=True)
     atomic_write_csv(run_dir / "utility_real_only_baseline.csv", real_only)
 
     frames = []
@@ -79,28 +79,25 @@ def run_existing_mixed_utility(
         synthetic_path = run_dir / f"synthetic_{variant}.csv"
         if not synthetic_path.exists():
             raise FileNotFoundError(f"Missing synthetic data for {variant}: {synthetic_path}")
-        result = evaluate_mixed_utility_curve(
-            variant,
-            real_train,
-            pd.read_csv(synthetic_path),
-            real_threshold,
-            real_eval,
-            config["target_col"],
-            config["categorical_cols"],
-            real_only,
-            additive_fractions=mixed_cfg.get(
-                "additive_fractions", [0.0, 0.25, 0.5, 1.0]
-            ),
-            replacement_fractions=mixed_cfg.get(
-                "replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]
-            ),
-            repeats=repeat_count,
-            seed=seed,
-            n_estimators=tree_count,
-            n_jobs=jobs,
-            threshold_beta=beta,
-            progress=progress,
-        )
+        task_results = []
+        synthetic = pd.read_csv(synthetic_path)
+        for task in utility_tasks:
+            baseline = real_only[real_only["utility_task"] == task["name"]].drop(
+                columns=["utility_task", "target_balance"]
+            )
+            task_result = evaluate_mixed_utility_curve(
+                variant, real_train, synthetic, real_eval, task["target_col"],
+                config["categorical_cols"], baseline,
+                positive_label=str(task["positive_label"]),
+                additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
+                replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
+                repeats=repeat_count, seed=seed, n_estimators=tree_count,
+                n_jobs=jobs, progress=progress,
+            )
+            task_result.insert(1, "utility_task", task["name"])
+            task_result.insert(2, "target_balance", task.get("balance", "unspecified"))
+            task_results.append(task_result)
+        result = pd.concat(task_results, ignore_index=True)
         atomic_write_csv(run_dir / f"utility_mixture_{variant}.csv", result)
         frames.append(result)
 
@@ -113,13 +110,16 @@ def run_existing_mixed_utility(
         run_dir / "utility_mixture_manifest.json",
         {
             "stage": stage,
-            "threshold_split": "audit" if stage == "val" else "val",
             "evaluation_split": stage,
+            "utility_tasks": utility_tasks,
+            "utility_protocol": {
+                "decision_rule": "random_forest_argmax",
+                "threshold_tuning": False,
+            },
             "variants": variants,
             "repeats": repeat_count,
             "n_estimators": tree_count,
             "n_jobs": jobs,
-            "threshold_beta": beta,
             "fraction_semantics": {
                 "additive": "synthetic rows divided by len(real_train)",
                 "replacement": "synthetic rows divided by fixed total training rows",

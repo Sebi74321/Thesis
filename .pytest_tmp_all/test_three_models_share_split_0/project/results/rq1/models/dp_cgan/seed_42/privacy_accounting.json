@@ -1,0 +1,20 @@
+{
+  "actual_discriminator_updates": 6,
+  "batch_size": 10,
+  "delta": 2e-06,
+  "discriminator_steps": 1,
+  "epochs": 1,
+  "epsilon_recomputed_actual_updates": 4.765811463907519,
+  "epsilon_recomputed_actual_updates_optimal_order": 4.2,
+  "epsilon_recomputed_upstream_steps": 0.0,
+  "epsilon_recomputed_upstream_steps_optimal_order": 1.1,
+  "limitation": "The upstream mechanism uses parameter-gradient hooks and weight clipping, not conventional per-example DP-SGD clipping. Values are implementation-specific estimates.",
+  "noise_multiplier": 1.0,
+  "privacy_claim_status": "upstream_privacy_estimate_unverified",
+  "private": true,
+  "sampling_probability": 0.16666666666666666,
+  "steps_per_epoch": 6,
+  "train_rows": 60,
+  "upstream_accountant_steps": 0,
+  "upstream_reported_epsilon": null
+}

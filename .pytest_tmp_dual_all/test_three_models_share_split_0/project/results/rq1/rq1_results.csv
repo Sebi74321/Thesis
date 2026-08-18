@@ -1,0 +1,4 @@
+convergence_warning_count,dataset,detector_auc,model,rq1_joint_rare_region_mass_error,seed,stage,synthetic_rows,training_rows,training_seconds,training_stability_status,utility_roc_auc,epsilon_recomputed_actual_updates,epsilon_recomputed_upstream_steps,privacy_claim_status,upstream_reported_epsilon
+0,test,0.5,ctabgan_plus,0.0,42,val,60,60,0.027850627899169922,no_instability_detected,0.5,,,,
+0,test,0.5,ctgan,0.0,42,val,60,60,0.030580997467041016,no_instability_detected,0.5,,,,
+0,test,0.5,dp_cgan,0.0,42,val,60,60,1.0013816356658936,no_instability_detected,0.5,4.765811463907519,0.0,upstream_privacy_estimate_unverified,

@@ -6,6 +6,7 @@ from xai_reweighting.evaluation import (
     evaluate_fidelity_and_tails,
     evaluate_privacy,
     evaluate_utility,
+    evaluate_variant,
 )
 
 
@@ -32,6 +33,7 @@ def test_utility_accepts_equivalent_real_and_generated_category_dtypes():
         real,
         target_col="target",
         categorical_cols=["category", "target"],
+        positive_label="1",
         seed=42,
         n_estimators=20,
         n_jobs=1,
@@ -39,6 +41,8 @@ def test_utility_accepts_equivalent_real_and_generated_category_dtypes():
 
     assert metrics["utility_accuracy"] >= 0.95
     assert metrics["utility_roc_auc"] >= 0.95
+    assert metrics["utility_decision_rule"] == "random_forest_argmax"
+    assert metrics["utility_f1_macro"] >= 0.95
 
 
 def test_detector_accepts_equivalent_mixed_categorical_dtypes():
@@ -58,6 +62,37 @@ def test_detector_accepts_equivalent_mixed_categorical_dtypes():
     )
 
     assert 0.0 <= result.metrics["detector_auc"] <= 1.0
+
+
+def test_variant_reports_balanced_and_imbalanced_utility_separately():
+    x = np.arange(80)
+    real = pd.DataFrame(
+        {
+            "x": x,
+            "gender": np.where(x % 2, "F", "M"),
+            "mortality": (x % 5 == 0).astype(int),
+        }
+    )
+    metrics, _ = evaluate_variant(
+        real.iloc[:60].reset_index(drop=True),
+        real.iloc[60:].reset_index(drop=True),
+        real.iloc[:60].reset_index(drop=True),
+        "mortality",
+        ["gender", "mortality"],
+        ["x"],
+        utility_tasks=[
+            {"name": "mortality", "target_col": "mortality", "positive_label": "1"},
+            {"name": "gender", "target_col": "gender", "positive_label": "F"},
+        ],
+        seed=42,
+        n_jobs=1,
+        n_estimators=10,
+    )
+
+    assert "utility_mortality_roc_auc" in metrics
+    assert "utility_mortality_positive_recall" in metrics
+    assert "utility_gender_roc_auc" in metrics
+    assert "utility_gender_f1_macro" in metrics
 
 
 def test_privacy_sampling_limits_only_nearest_neighbor_workload():

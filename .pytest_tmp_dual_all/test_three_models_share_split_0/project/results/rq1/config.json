@@ -1,0 +1,46 @@
+{
+  "categorical_cols": [
+    "category",
+    "target"
+  ],
+  "continuous_cols": [
+    "x"
+  ],
+  "data_path": "data/input.csv",
+  "dataset_name": "test",
+  "device": "cpu",
+  "evaluation": {
+    "n_estimators": 5
+  },
+  "frozen": false,
+  "mixed_utility": {
+    "enabled": false
+  },
+  "models": {
+    "ctabgan_plus": {
+      "batch_size": 10,
+      "epochs": 1
+    },
+    "ctgan": {
+      "batch_size": 10,
+      "epochs": 1
+    },
+    "dp_cgan": {
+      "batch_size": 10,
+      "epochs": 1
+    }
+  },
+  "n_jobs": 1,
+  "seeds": [
+    42
+  ],
+  "selected_models": [
+    "ctabgan_plus",
+    "ctgan",
+    "dp_cgan"
+  ],
+  "smoke": false,
+  "split_seed": 42,
+  "stage": "val",
+  "target_col": "target"
+}

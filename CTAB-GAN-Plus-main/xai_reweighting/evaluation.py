@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
+    balanced_accuracy_score,
     f1_score,
     precision_score,
     recall_score,
@@ -164,6 +165,8 @@ def evaluate_utility(
     real_eval: pd.DataFrame,
     target_col: str,
     categorical_cols: Iterable[str],
+    positive_label: str,
+    metric_prefix: str = "utility_",
     seed: int = 42,
     n_estimators: int = 300,
     n_jobs: int = -1,
@@ -175,11 +178,15 @@ def evaluate_utility(
         if column != target_col and column in predictors:
             X_syn[column] = _cat(X_syn[column])
             X_real[column] = _cat(X_real[column])
-    rare_label = y_real.value_counts().idxmin()
+    positive_label = str(positive_label)
+    if y_real.nunique() != 2:
+        raise ValueError("Utility evaluation currently requires a binary target")
+    if positive_label not in set(y_real):
+        raise ValueError(f"Configured positive label {positive_label!r} is absent from evaluation data")
     label_encoder = LabelEncoder().fit(pd.concat([y_syn, y_real], ignore_index=True))
     y_syn_encoded = label_encoder.transform(y_syn)
     y_real_encoded = label_encoder.transform(y_real)
-    rare_class = int(label_encoder.transform([rare_label])[0])
+    positive_class = int(label_encoder.transform([positive_label])[0])
     preprocessor = _predictor_preprocessor(predictors, categorical_cols)
     X_syn_p = preprocessor.fit_transform(X_syn)
     X_real_p = preprocessor.transform(X_real)
@@ -191,28 +198,25 @@ def evaluate_utility(
     )
     model.fit(X_syn_p, y_syn_encoded)
     prediction = model.predict(X_real_p)
-    if rare_class not in model.classes_:
-        probability = np.zeros(len(y_real_encoded))
+    if positive_class not in model.classes_:
+        probability = np.zeros(len(y_real))
     else:
-        probability = model.predict_proba(X_real_p)[:, list(model.classes_).index(rare_class)]
-    truth_binary = (y_real_encoded == rare_class).astype(int)
+        probability = model.predict_proba(X_real_p)[:, list(model.classes_).index(positive_class)]
+    truth_binary = (y_real_encoded == positive_class).astype(int)
     return {
-        "utility_roc_auc": float(roc_auc_score(truth_binary, probability)),
-        "utility_pr_auc": float(average_precision_score(truth_binary, probability)),
-        "utility_f1": float(
-            f1_score(y_real_encoded, prediction, pos_label=rare_class, zero_division=0)
-        ),
-        "utility_accuracy": float(accuracy_score(y_real_encoded, prediction)),
-        "utility_precision": float(
-            precision_score(y_real_encoded, prediction, pos_label=rare_class, zero_division=0)
-        ),
-        "utility_recall": float(
-            recall_score(y_real_encoded, prediction, pos_label=rare_class, zero_division=0)
-        ),
-        "rare_event_recall": float(
-            recall_score(y_real_encoded, prediction, pos_label=rare_class, zero_division=0)
-        ),
-        "rare_class": str(rare_label),
+        f"{metric_prefix}target": target_col,
+        f"{metric_prefix}positive_label": positive_label,
+        f"{metric_prefix}decision_rule": "random_forest_argmax",
+        f"{metric_prefix}roc_auc": float(roc_auc_score(truth_binary, probability)),
+        f"{metric_prefix}pr_auc": float(average_precision_score(truth_binary, probability)),
+        f"{metric_prefix}accuracy": float(accuracy_score(y_real_encoded, prediction)),
+        f"{metric_prefix}balanced_accuracy": float(balanced_accuracy_score(y_real_encoded, prediction)),
+        f"{metric_prefix}precision_macro": float(precision_score(y_real_encoded, prediction, average="macro", zero_division=0)),
+        f"{metric_prefix}recall_macro": float(recall_score(y_real_encoded, prediction, average="macro", zero_division=0)),
+        f"{metric_prefix}f1_macro": float(f1_score(y_real_encoded, prediction, average="macro", zero_division=0)),
+        f"{metric_prefix}positive_precision": float(precision_score(y_real_encoded, prediction, pos_label=positive_class, zero_division=0)),
+        f"{metric_prefix}positive_recall": float(recall_score(y_real_encoded, prediction, pos_label=positive_class, zero_division=0)),
+        f"{metric_prefix}positive_f1": float(f1_score(y_real_encoded, prediction, pos_label=positive_class, zero_division=0)),
     }
 
 
@@ -286,6 +290,9 @@ def evaluate_variant(
     target_col: str,
     categorical_cols: Iterable[str],
     continuous_cols: Iterable[str],
+    utility_target_col: str | None = None,
+    utility_positive_label: str = "1",
+    utility_tasks: Sequence[Dict[str, str]] | None = None,
     seed: int = 42,
     n_jobs: int = -1,
     n_estimators: int = 300,
@@ -296,12 +303,28 @@ def evaluate_variant(
     metrics, feature_details = evaluate_fidelity_and_tails(
         real_eval, synthetic, categorical_cols, continuous_cols
     )
-    metrics.update(
-        evaluate_utility(
-            synthetic, real_eval, target_col, categorical_cols, seed,
-            n_estimators=n_estimators, n_jobs=n_jobs,
+    tasks = utility_tasks or [
+        {
+            "name": "mortality",
+            "target_col": utility_target_col or target_col,
+            "positive_label": utility_positive_label,
+        }
+    ]
+    for task in tasks:
+        name = str(task["name"])
+        metrics.update(
+            evaluate_utility(
+                synthetic,
+                real_eval,
+                str(task["target_col"]),
+                categorical_cols,
+                str(task["positive_label"]),
+                metric_prefix=f"utility_{name}_",
+                seed=seed,
+                n_estimators=n_estimators,
+                n_jobs=n_jobs,
+            )
         )
-    )
     metrics.update(
         evaluate_privacy(
             real_train,

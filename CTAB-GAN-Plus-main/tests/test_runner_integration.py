@@ -63,7 +63,6 @@ def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch)
             "replacement_fractions": [0.0, 1.0],
             "repeats": 1,
             "n_estimators": 5,
-            "threshold_beta": 2.0,
         },
     }
     output = run_experiment(

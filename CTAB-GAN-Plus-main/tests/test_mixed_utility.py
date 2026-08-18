@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 
 from xai_reweighting.mixed_utility import (
-    _select_fbeta_threshold,
     _stratified_sample,
     evaluate_mixed_utility_curve,
     evaluate_real_only_baseline,
@@ -21,16 +20,6 @@ def _frame(start, size):
     )
 
 
-def test_f2_threshold_prefers_recall_when_probabilities_are_low():
-    truth = np.array([0, 0, 0, 1, 1])
-    probability = np.array([0.01, 0.02, 0.03, 0.20, 0.30])
-
-    threshold, score = _select_fbeta_threshold(truth, probability, beta=2.0)
-
-    assert threshold <= 0.20
-    assert score == 1.0
-
-
 def test_stratified_sample_is_exact_and_deterministic():
     frame = _frame(0, 100)
     first = _stratified_sample(frame, 25, "target", seed=42)
@@ -44,14 +33,13 @@ def test_stratified_sample_is_exact_and_deterministic():
 def test_mixed_curves_preserve_sizes_and_include_real_baselines():
     real_train = _frame(0, 100)
     synthetic = real_train.sample(frac=1.0, random_state=7).reset_index(drop=True)
-    real_threshold = _frame(100, 50)
     real_eval = _frame(150, 50)
     real_only = evaluate_real_only_baseline(
         real_train,
-        real_threshold,
         real_eval,
         "target",
         ["category", "target"],
+        positive_label="1",
         repeats=1,
         n_estimators=10,
         n_jobs=1,
@@ -61,11 +49,11 @@ def test_mixed_curves_preserve_sizes_and_include_real_baselines():
         "A5",
         real_train,
         synthetic,
-        real_threshold,
         real_eval,
         "target",
         ["category", "target"],
         real_only,
+        positive_label="1",
         additive_fractions=[0.0, 0.5, 1.0],
         replacement_fractions=[0.0, 0.5, 1.0],
         repeats=1,
@@ -90,4 +78,5 @@ def test_mixed_curves_preserve_sizes_and_include_real_baselines():
 
     summary = summarize_mixed_utility(result)
     assert len(summary) == 6
-    assert {"pr_auc_mean", "tuned_recall_mean", "tuned_f2_mean"}.issubset(summary)
+    assert {"pr_auc_mean", "balanced_accuracy_mean", "f1_macro_mean"}.issubset(summary)
+    assert not any(column.startswith("tuned_") for column in result)

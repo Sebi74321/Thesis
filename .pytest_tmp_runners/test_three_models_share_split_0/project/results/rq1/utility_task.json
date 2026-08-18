@@ -1,0 +1,15 @@
+{
+  "decision_rule": "random_forest_argmax",
+  "evaluation_class_frequencies": {
+    "0": 0.8,
+    "1": 0.2
+  },
+  "positive_label": "1",
+  "target_col": "target",
+  "task_type": "classification",
+  "threshold_tuning": false,
+  "train_class_frequencies": {
+    "0": 0.8,
+    "1": 0.2
+  }
+}

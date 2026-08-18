@@ -1,0 +1,22 @@
+{
+  "allow_tf32": false,
+  "code_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "completed_at": "2026-08-18T12:47:30.578799+00:00",
+  "data_sha256": "e170085aae6220140b1195e841cdb67e0403b5eca759f45d568049944d497bfb",
+  "deterministic": true,
+  "device": "cpu",
+  "elapsed_seconds": 8.820024251937866,
+  "fingerprint": "a86d6cefaffc25a98e0063754550e572c9f05fa305a018e32db3786d3ebc4559",
+  "precision": "test-double",
+  "progress": "auto",
+  "smoke": false,
+  "started_at": "2026-08-18T12:47:21.758774+00:00",
+  "status": "complete",
+  "variants_completed": [
+    "A0",
+    "A1",
+    "A2",
+    "A4",
+    "A5"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "convergence_warning_count": 0,
+  "convergence_warnings": [],
+  "discriminator_updates": 6,
+  "epochs_completed": 1,
+  "epochs_configured": 1,
+  "generator_updates": 6,
+  "losses": {
+    "generator": {
+      "final": 0.1,
+      "initial": 0.1,
+      "max_absolute": 0.1,
+      "tail_mean": 0.1,
+      "tail_relative_std": 0.0,
+      "tail_slope_per_epoch": 0.0,
+      "tail_std": 0.0
+    }
+  },
+  "status": "no_instability_detected",
+  "steps_per_epoch": 6,
+  "tail_epochs": 1,
+  "training_rows": 60,
+  "warning_extreme_loss": false,
+  "warning_unstable_tail": false
+}
