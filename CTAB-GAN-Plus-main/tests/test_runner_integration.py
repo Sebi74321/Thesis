@@ -1,8 +1,14 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
-from xai_reweighting.run_ablation import VALID_VARIANTS, build_parser, run_experiment
+from xai_reweighting.run_ablation import (
+    VALID_VARIANTS,
+    _build_controlled_deltas,
+    build_parser,
+    run_experiment,
+)
 
 
 class FakeGenerator:
@@ -19,6 +25,38 @@ def test_progress_cli_modes():
     assert parser.parse_args(
         ["--config", "config.json", "--progress", "off"]
     ).progress == "off"
+
+
+def test_controlled_deltas_use_a0_and_real_utility_references():
+    metrics = {
+        "A0": {"utility_mortality_roc_auc": 0.60, "detector_auc": 0.90},
+        "A2": {"utility_mortality_roc_auc": 0.70, "detector_auc": 0.80},
+        "A5": {"utility_mortality_roc_auc": 0.75, "detector_auc": 0.70},
+    }
+    real_only = pd.DataFrame(
+        {
+            "utility_task": ["mortality", "mortality"],
+            "roc_auc": [0.80, 0.82],
+            "repeat": [0, 1],
+            "seed": [42, 1042],
+        }
+    )
+    summary, deltas = _build_controlled_deltas(
+        pd.DataFrame([{"variant": key, **value} for key, value in metrics.items()]),
+        metrics,
+        real_only,
+        [{"name": "mortality"}],
+    )
+
+    a5 = summary.set_index("variant").loc["A5"]
+    assert a5["delta_utility_mortality_roc_auc_vs_A0"] == pytest.approx(0.15)
+    assert a5["real_baseline_utility_mortality_roc_auc"] == pytest.approx(0.81)
+    assert a5["delta_utility_mortality_roc_auc_vs_real"] == pytest.approx(-0.06)
+    assert set(deltas["reference_type"]) == {
+        "synthetic_baseline",
+        "real_data_utility_baseline",
+    }
+    assert "A5-A2" not in set(deltas["comparison"])
 
 
 def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
@@ -76,7 +114,10 @@ def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch)
     )
     summary = pd.read_csv(output / "ablation_summary.csv")
     assert summary["variant"].tolist() == list(VALID_VARIANTS)
-    assert (output / "ablation_deltas.csv").exists()
+    deltas = pd.read_csv(output / "ablation_deltas.csv")
+    assert set(deltas["control"]) == {"A0", "REAL"}
+    assert "comparison_vs_A0" in summary
+    assert "comparison_vs_real" in summary
     assert all((output / f"metrics_{variant}.json").exists() for variant in VALID_VARIANTS)
     assert (output / "utility_real_only_baseline.csv").exists()
     assert (output / "utility_mixture_results.csv").exists()

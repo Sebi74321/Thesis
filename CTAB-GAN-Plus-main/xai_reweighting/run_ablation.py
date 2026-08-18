@@ -39,6 +39,97 @@ VALID_VARIANTS = ("A0", "A1", "A2", "A4", "A5")
 PREVIOUS = {"A1": "A0", "A2": "A1", "A4": "A2", "A5": "A4"}
 
 
+def _numeric_metric_delta(current: Dict[str, Any], reference: Dict[str, Any]) -> Dict[str, float]:
+    """Return numeric metric differences shared by two result dictionaries."""
+    result: Dict[str, float] = {}
+    for key, value in current.items():
+        reference_value = reference.get(key)
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and isinstance(reference_value, (int, float))
+            and not isinstance(reference_value, bool)
+        ):
+            result[key] = float(value) - float(reference_value)
+    return result
+
+
+def _build_controlled_deltas(
+    summary: pd.DataFrame,
+    metrics_by_variant: Dict[str, Dict[str, Any]],
+    real_only_utility: pd.DataFrame,
+    utility_tasks: List[Dict[str, Any]],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Attach stable A0/real-reference deltas and retain sequential diagnostics."""
+    summary = summary.copy()
+    delta_rows: List[Dict[str, Any]] = []
+
+    if "A0" in metrics_by_variant:
+        a0 = metrics_by_variant["A0"]
+        for variant, current in metrics_by_variant.items():
+            differences = _numeric_metric_delta(current, a0)
+            delta_rows.append({
+                "comparison": f"{variant}-A0",
+                "variant": variant,
+                "control": "A0",
+                "reference_type": "synthetic_baseline",
+                **{f"delta_{key}": value for key, value in differences.items()},
+            })
+            row_mask = summary["variant"] == variant
+            summary.loc[row_mask, "comparison_vs_A0"] = f"{variant}-A0"
+            for key, value in differences.items():
+                summary.loc[row_mask, f"delta_{key}_vs_A0"] = value
+
+    if not real_only_utility.empty:
+        excluded = {
+            "synthetic_fraction", "synthetic_share_of_training", "repeat", "seed",
+            "real_training_rows", "synthetic_training_rows", "training_rows",
+        }
+        for variant, current in metrics_by_variant.items():
+            real_row: Dict[str, Any] = {
+                "comparison": f"{variant}-REAL",
+                "variant": variant,
+                "control": "REAL",
+                "reference_type": "real_data_utility_baseline",
+            }
+            row_mask = summary["variant"] == variant
+            summary.loc[row_mask, "comparison_vs_real"] = f"{variant}-REAL"
+            for task in utility_tasks:
+                task_name = str(task["name"])
+                task_rows = real_only_utility[
+                    real_only_utility["utility_task"].astype(str) == task_name
+                ]
+                if task_rows.empty:
+                    continue
+                numeric_means = task_rows.select_dtypes(include="number").mean()
+                for metric, reference_value in numeric_means.items():
+                    if metric in excluded:
+                        continue
+                    result_key = f"utility_{task_name}_{metric}"
+                    current_value = current.get(result_key)
+                    if not isinstance(current_value, (int, float)) or isinstance(current_value, bool):
+                        continue
+                    delta = float(current_value) - float(reference_value)
+                    real_row[f"delta_{result_key}"] = delta
+                    summary.loc[row_mask, f"real_baseline_{result_key}"] = float(reference_value)
+                    summary.loc[row_mask, f"delta_{result_key}_vs_real"] = delta
+            delta_rows.append(real_row)
+
+    # These contrasts remain useful for mechanism diagnosis but are secondary.
+    for variant, previous in PREVIOUS.items():
+        if variant not in metrics_by_variant or previous not in metrics_by_variant:
+            continue
+        differences = _numeric_metric_delta(
+            metrics_by_variant[variant], metrics_by_variant[previous]
+        )
+        row_mask = summary["variant"] == variant
+        summary.loc[row_mask, "sequential_comparison"] = f"{variant}-{previous}"
+        for key, value in differences.items():
+            summary.loc[row_mask, f"diagnostic_delta_{key}_vs_previous"] = value
+
+    return summary, pd.DataFrame(delta_rows)
+
+
 def _load_config(path: Path) -> Dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
         config = json.load(handle)
@@ -492,33 +583,39 @@ def run_experiment(
     mixed_cfg = config.get("mixed_utility", {})
     mixed_enabled = bool(mixed_cfg.get("enabled", False))
     mixed_results: List[pd.DataFrame] = []
-    real_only_utility = pd.DataFrame()
-    if mixed_enabled:
-        real_only_path = output_dir / "utility_real_only_baseline.csv"
-        if resume and real_only_path.exists():
-            real_only_utility = pd.read_csv(real_only_path)
-        else:
-            task_frames = []
-            for task in utility_tasks:
-                task_frame = evaluate_real_only_baseline(
-                    splits.train,
-                    real_eval,
-                    task["target_col"],
-                    config["categorical_cols"],
-                    positive_label=str(task["positive_label"]),
-                    repeats=int(mixed_cfg.get("repeats", 3)),
-                    seed=seed,
-                    n_estimators=int(
-                        mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
-                    ),
-                    n_jobs=int(config.get("n_jobs", -1)),
-                    progress=progress,
-                )
-                task_frame.insert(0, "utility_task", task["name"])
-                task_frame.insert(1, "target_balance", task.get("balance", "unspecified"))
-                task_frames.append(task_frame)
-            real_only_utility = pd.concat(task_frames, ignore_index=True)
-            atomic_write_csv(real_only_path, real_only_utility)
+    real_only_path = output_dir / "utility_real_only_baseline.csv"
+    if resume and real_only_path.exists():
+        real_only_utility = pd.read_csv(real_only_path)
+    else:
+        task_frames = []
+        baseline_repeats = int(
+            mixed_cfg.get("repeats", 3)
+            if mixed_enabled
+            else evaluation_cfg.get("real_baseline_repeats", 1)
+        )
+        baseline_estimators = int(
+            mixed_cfg.get("n_estimators", evaluation_cfg.get("n_estimators", 300))
+            if mixed_enabled
+            else evaluation_cfg.get("n_estimators", 300)
+        )
+        for task in utility_tasks:
+            task_frame = evaluate_real_only_baseline(
+                splits.train,
+                real_eval,
+                task["target_col"],
+                config["categorical_cols"],
+                positive_label=str(task["positive_label"]),
+                repeats=baseline_repeats,
+                seed=seed,
+                n_estimators=baseline_estimators,
+                n_jobs=int(config.get("n_jobs", -1)),
+                progress=progress,
+            )
+            task_frame.insert(0, "utility_task", task["name"])
+            task_frame.insert(1, "target_balance", task.get("balance", "unspecified"))
+            task_frames.append(task_frame)
+        real_only_utility = pd.concat(task_frames, ignore_index=True)
+        atomic_write_csv(real_only_path, real_only_utility)
 
     def mixed_utility_for_variant(variant: str, synthetic: pd.DataFrame) -> pd.DataFrame:
         path = output_dir / f"utility_mixture_{variant}.csv"
@@ -615,24 +712,11 @@ def run_experiment(
         metrics_by_variant[variant] = metrics
         rows.append(metrics)
 
-    summary = pd.DataFrame(rows)
-    delta_rows = []
-    for variant, previous in PREVIOUS.items():
-        if variant not in metrics_by_variant or previous not in metrics_by_variant:
-            continue
-        current, control = metrics_by_variant[variant], metrics_by_variant[previous]
-        delta = {"comparison": f"{variant}-{previous}", "variant": variant, "control": previous}
-        for key, value in current.items():
-            if isinstance(value, (int, float)) and isinstance(control.get(key), (int, float)):
-                delta[f"delta_{key}"] = value - control[key]
-        delta_rows.append(delta)
-        row_mask = summary["variant"] == variant
-        summary.loc[row_mask, "comparison"] = f"{variant}-{previous}"
-        for key, value in delta.items():
-            if key.startswith("delta_"):
-                summary.loc[row_mask, f"vs_previous_{key}"] = value
+    summary, delta_rows = _build_controlled_deltas(
+        pd.DataFrame(rows), metrics_by_variant, real_only_utility, utility_tasks
+    )
     atomic_write_csv(output_dir / "ablation_summary.csv", summary)
-    atomic_write_csv(output_dir / "ablation_deltas.csv", pd.DataFrame(delta_rows))
+    atomic_write_csv(output_dir / "ablation_deltas.csv", delta_rows)
     if mixed_enabled and mixed_results:
         mixed_all = pd.concat(mixed_results, ignore_index=True)
         atomic_write_csv(output_dir / "utility_mixture_results.csv", mixed_all)

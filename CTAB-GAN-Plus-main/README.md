@@ -46,6 +46,22 @@ family, or every selected feature, is ignored. The latter covers both mortality
 and gender utility. These are evaluation-only sensitivity analyses; they do not
 remove the columns from GAN training.
 
+### Controlled ablation deltas
+
+The primary ablation reference is always A0. `ablation_deltas.csv` therefore
+contains `A1-A0`, `A2-A0`, `A4-A0`, and `A5-A0` comparisons (plus the zero
+`A0-A0` reference) for fidelity, tail, detector, utility, and privacy-proxy
+metrics. It also contains one `<variant>-REAL` row per variant for downstream
+utility metrics. The real reference is trained on `real_train` and evaluated on
+the same frozen validation or test split as the synthetic-data utility models.
+
+`ablation_summary.csv` exposes the same values as
+`delta_<metric>_vs_A0`, and utility-only `delta_<metric>_vs_real` columns along
+with the corresponding `real_baseline_<metric>` value. Sequential comparisons
+such as A5 versus A4 remain available only as explicitly named
+`diagnostic_delta_<metric>_vs_previous` columns; they are not treated as the
+main controlled effect.
+
 
 ## Prerequisite
 
