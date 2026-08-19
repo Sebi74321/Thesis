@@ -62,6 +62,25 @@ such as A5 versus A4 remain available only as explicitly named
 `diagnostic_delta_<metric>_vs_previous` columns; they are not treated as the
 main controlled effect.
 
+### Reevaluate a completed run without GAN training
+
+All evaluation artifacts for a completed, non-smoke ablation run can be
+recomputed from its persisted split indices and saved synthetic CSV files:
+
+```bash
+python -m xai_reweighting.run_evaluation \
+  --run-dir results/<completed-run-directory> \
+  --variants A0,A1,A2,A4,A5 \
+  --progress on
+```
+
+This never fits a generator. It verifies the source-data hash and saved
+schemas, then refreshes per-variant fidelity, tail, utility, privacy and
+detector metrics; real-only and mixed utility; A0/real controlled deltas; and
+diagnostic analyses. Progress and completion are recorded in
+`evaluation_rerun_manifest.json`. In the orchestration notebook, select the
+completed seed and set `RERUN_EVALUATION=True` to run the same command.
+
 
 ## Prerequisite
 

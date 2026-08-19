@@ -14,7 +14,9 @@ def test_orchestrator_notebook_is_valid_and_code_cells_compile():
 
     source = "\n".join("".join(cell["source"]) for cell in code_cells)
     assert "RUN_EXPERIMENT = False" in source
+    assert "RERUN_EVALUATION = False" in source
     assert "xai_reweighting.run_ablation" in source
+    assert "xai_reweighting.run_evaluation" in source
     assert "ablation_summary.csv" in source
     assert "feature_scores_" in source
 
