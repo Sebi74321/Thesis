@@ -44,8 +44,9 @@ presented as independently verified formal privacy guarantees.
 
 ## XAI-guided weighted retraining
 
-The runner implements the MIMIC and WiDS CTAB-GAN+ variants `A0,A1,A2,A4,A5`.
-Run it from `CTAB-GAN-Plus-main`.
+The runner implements the MIMIC and WiDS variants `A0,A1,A2,A4,A5` for
+CTAB-GAN+, CTGAN, and DP-CGAN. Run it from `CTAB-GAN-Plus-main` and select the
+framework through the configuration file.
 
 ```bash
 # Local CPU smoke test
@@ -56,10 +57,23 @@ python -m xai_reweighting.run_ablation \
 python -m xai_reweighting.run_ablation \
   --config configs/mimic_ctabgan.json --stage val --device auto
 
+# The identical weighted protocol with CTGAN or DP-CGAN
+python -m xai_reweighting.run_ablation \
+  --config configs/mimic_ctgan.json --stage val --device auto
+python -m xai_reweighting.run_ablation \
+  --config configs/mimic_dpcgan.json --stage val --device auto
+
 # WiDS H100 smoke test, then remove --smoke for the full run
 python -m xai_reweighting.run_ablation \
   --config configs/wids_ctabgan.json --stage val --device cuda:0 --smoke
 ```
+
+WiDS alternatives are `configs/wids_ctgan.json` and
+`configs/wids_dpcgan.json`. Every variant gets a fresh generator, isolated
+backend work directory, checkpoint, convergence diagnostics, and identical
+evaluation. DP-CGAN additionally saves per-variant upstream privacy estimates;
+these do not constitute an end-to-end DP guarantee for the XAI weighting
+pipeline.
 
 GAN fits show epoch progress with elapsed time and ETA. In non-interactive
 cluster logs, `--progress auto` writes periodic progress lines instead. Use
@@ -131,10 +145,10 @@ replacing 0%, 25%, 50%, 75%, or 100% of real rows with synthetic rows. MIMIC
 uses five deterministic classifier repeats; the larger WiDS evaluation uses
 three repeats and 100-tree forests to control runtime.
 
-Recall-oriented operating points maximize F2 on development data. Validation
-runs select the threshold on `real_audit` and report on `real_val`; final runs
-select it on `real_val` and report once on `real_test`. Both default-threshold
-and tuned-threshold results are retained, alongside a real-only reference.
+Utility classification is data agnostic: the class-balanced Random Forest uses
+its fixed argmax prediction rule, with no threshold tuning on audit,
+validation, or test data. Mortality and the more balanced gender task are
+reported separately alongside a real-only reference.
 
 The main artifacts are `utility_mixture_results.csv`,
 `utility_mixture_summary.csv`, and `utility_real_only_baseline.csv`. Add the

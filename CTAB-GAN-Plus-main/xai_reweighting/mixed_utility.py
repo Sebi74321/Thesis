@@ -319,7 +319,10 @@ def evaluate_mixed_utility_curve(
 def summarize_mixed_utility(results: pd.DataFrame) -> pd.DataFrame:
     keys = [
         column
-        for column in ["variant", "utility_task", "target_balance", "protocol", "synthetic_fraction"]
+        for column in [
+            "variant", "generator_name", "utility_task", "target_balance",
+            "protocol", "synthetic_fraction",
+        ]
         if column in results.columns
     ]
     counts = ["real_training_rows", "synthetic_training_rows", "training_rows"]

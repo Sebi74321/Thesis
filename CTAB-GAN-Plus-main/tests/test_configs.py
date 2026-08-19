@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from xai_reweighting.run_model_comparison import _load_config as load_rq1_config
+from xai_reweighting.run_ablation import _load_config as load_ablation_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -74,3 +75,31 @@ def test_rq1_configs_define_all_models(name):
     assert config["models"]["dp_cgan"]["saved_transformer"] is None
     assert config["models"]["dp_cgan"]["discriminator_steps"] == 10
     assert config["models"]["ctabgan_plus"]["categorical_columns"] == config["categorical_cols"]
+
+
+@pytest.mark.parametrize(
+    ("name", "generator_name", "batch_size", "epochs"),
+    [
+        ("mimic_ctgan.json", "ctgan", 500, 150),
+        ("mimic_dpcgan.json", "dp_cgan", 500, 150),
+        ("wids_ctgan.json", "ctgan", 1000, 200),
+        ("wids_dpcgan.json", "dp_cgan", 1000, 200),
+    ],
+)
+def test_weighted_multigan_configs_inherit_dataset_protocol(
+    name, generator_name, batch_size, epochs
+):
+    config = load_ablation_config(PROJECT_ROOT / "configs" / name)
+
+    assert config["generator_name"] == generator_name
+    assert config["generator"]["categorical_columns"] == config["categorical_cols"]
+    assert config["generator"]["batch_size"] == batch_size
+    assert config["generator"]["epochs"] == epochs
+    assert config["weighting"]["top_k"] == 5
+    assert {task["name"] for task in config["utility_tasks"]} == {
+        "mortality",
+        "gender",
+    }
+    if generator_name == "dp_cgan":
+        assert config["generator"]["private"] is True
+        assert config["generator"]["discriminator_steps"] == 10

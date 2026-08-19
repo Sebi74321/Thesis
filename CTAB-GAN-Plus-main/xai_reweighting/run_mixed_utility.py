@@ -56,6 +56,7 @@ def run_existing_mixed_utility(
     )
     jobs = int(n_jobs if n_jobs is not None else config.get("n_jobs", -1))
     seed = int(config.get("seed", 42))
+    generator_name = str(config.get("generator_name", "ctabgan_plus"))
     utility_tasks = config.get("utility_tasks") or [
         {"name": "mortality", "balance": "imbalanced", "target_col": config["target_col"], "positive_label": "1"},
         {"name": "gender", "balance": "balanced", "target_col": "gender", "positive_label": "F"},
@@ -98,6 +99,7 @@ def run_existing_mixed_utility(
             task_result.insert(2, "target_balance", task.get("balance", "unspecified"))
             task_results.append(task_result)
         result = pd.concat(task_results, ignore_index=True)
+        result.insert(1, "generator_name", generator_name)
         atomic_write_csv(run_dir / f"utility_mixture_{variant}.csv", result)
         frames.append(result)
 
@@ -111,6 +113,7 @@ def run_existing_mixed_utility(
         {
             "stage": stage,
             "evaluation_split": stage,
+            "generator_name": generator_name,
             "utility_tasks": utility_tasks,
             "utility_protocol": {
                 "decision_rule": "random_forest_argmax",

@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +20,7 @@ from .augmentation import create_uniform_augmentation, create_weighted_augmentat
 from .data_split import create_data_splits
 from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
+from .dp_accounting import upstream_privacy_accounting
 from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
@@ -36,6 +39,7 @@ from .scoring import (
 )
 
 VALID_VARIANTS = ("A0", "A1", "A2", "A4", "A5")
+VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
 PREVIOUS = {"A1": "A0", "A2": "A1", "A4": "A2", "A5": "A4"}
 
 
@@ -131,12 +135,32 @@ def _build_controlled_deltas(
 
 
 def _load_config(path: Path) -> Dict[str, Any]:
+    path = path.resolve()
     with path.open(encoding="utf-8") as handle:
         config = json.load(handle)
+    base_name = config.pop("base_config", None)
+    if base_name:
+        base = _load_config(path.parent / str(base_name))
+        generator_override = config.pop("generator", None)
+        base.update(config)
+        if generator_override is not None:
+            base["generator"] = generator_override
+        config = base
     required = {"data_path", "target_col", "categorical_cols", "generator"}
     missing = required - set(config)
     if missing:
         raise ValueError(f"Config is missing required fields: {sorted(missing)}")
+    generator_name = str(config.get("generator_name", "ctabgan_plus")).strip().lower()
+    if generator_name not in VALID_GENERATORS:
+        raise ValueError(
+            f"Unknown generator_name {generator_name!r}; choose from {VALID_GENERATORS}"
+        )
+    if generator_name == "dp_cgan" and config["generator"].get("private") is not True:
+        raise ValueError("dp_cgan weighted retraining requires generator.private=true")
+    config["generator_name"] = generator_name
+    config["generator"].setdefault(
+        "categorical_columns", list(config["categorical_cols"])
+    )
     return config
 
 
@@ -158,18 +182,19 @@ def _fingerprint(config: Dict[str, Any], data_hash: str, code_hash: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _adapter(config, device, seed, progress, progress_label):
-    from .generator_adapters import CTABGANPlusAdapter
+def _adapter(config, device, seed, progress, progress_label, work_dir=None):
+    from .generator_adapters import create_generator
 
-    generator = dict(config["generator"])
-    return CTABGANPlusAdapter(
-        **generator,
+    return create_generator(
+        config.get("generator_name", "ctabgan_plus"),
+        dict(config["generator"]),
         device=device,
         seed=seed,
         deterministic=config.get("deterministic", True),
         allow_tf32=config.get("allow_tf32", False),
         progress=progress,
         progress_label=progress_label,
+        work_dir=work_dir,
     )
 
 
@@ -250,8 +275,34 @@ def _training_diagnostics(history: pd.DataFrame) -> Dict[str, Any]:
     return diagnostics
 
 
-def _save_training_artifacts(model, variant: str, output_dir: Path) -> Dict[str, Any]:
+def _atomic_checkpoint(model, path: Path) -> bool:
+    save = getattr(model, "save_checkpoint", None)
+    if save is None:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=path.name, suffix=".tmp", dir=path.parent)
+    os.close(fd)
+    try:
+        save(Path(temporary))
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return True
+
+
+def _save_training_artifacts(
+    model,
+    variant: str,
+    output_dir: Path,
+    *,
+    generator_name: str = "ctabgan_plus",
+    generator_config: Dict[str, Any] | None = None,
+    training_rows: int | None = None,
+) -> Dict[str, Any]:
     history = getattr(model, "training_history", pd.DataFrame())
+    if not isinstance(history, pd.DataFrame):
+        history = pd.DataFrame(history)
     diagnostics = _training_diagnostics(history)
     atomic_write_csv(output_dir / f"training_history_{variant}.csv", history)
 
@@ -266,20 +317,90 @@ def _save_training_artifacts(model, variant: str, output_dir: Path) -> Dict[str,
     decimals = getattr(model, "decimals", None)
     if decimals:
         atomic_write_json(output_dir / f"measurement_precision_{variant}.json", decimals)
-    diagnostics["mixture_all_converged"] = all(
-        item.get("converged", False) for item in mixture
+    diagnostics["mixture_all_converged"] = (
+        all(item.get("converged", False) for item in mixture) if mixture else None
     )
+    convergence_warnings = list(getattr(model, "convergence_warnings", []))
+    diagnostics["convergence_warnings"] = convergence_warnings
+    diagnostics["convergence_warning_count"] = len(convergence_warnings)
+    diagnostics["generator_name"] = generator_name
+    if training_rows is not None:
+        diagnostics["training_rows"] = int(training_rows)
+    settings = generator_config or {}
+    for key in ("epochs", "batch_size", "discriminator_steps", "pac"):
+        if key in settings:
+            diagnostics[f"{key}_configured"] = settings[key]
+    if training_rows is not None and settings.get("batch_size"):
+        steps_per_epoch = max(int(training_rows) // int(settings["batch_size"]), 1)
+        epochs = int(settings.get("epochs", 0))
+        diagnostics["steps_per_epoch"] = steps_per_epoch
+        diagnostics["generator_updates"] = steps_per_epoch * epochs
+        if "discriminator_steps" in settings:
+            diagnostics["discriminator_updates"] = (
+                diagnostics["generator_updates"] * int(settings["discriminator_steps"])
+            )
+    atomic_write_json(
+        output_dir / f"convergence_warnings_{variant}.json", convergence_warnings
+    )
+    upstream_stdout = str(getattr(model, "upstream_stdout", "") or "")
+    if upstream_stdout:
+        log_path = output_dir / f"upstream_training_{variant}.log"
+        fd, temporary = tempfile.mkstemp(prefix=log_path.name, suffix=".tmp", dir=output_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(upstream_stdout)
+            os.replace(temporary, log_path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
     atomic_write_json(output_dir / f"training_diagnostics_{variant}.json", diagnostics)
     return diagnostics
 
 
-def _fit_and_save_training(model, data: pd.DataFrame, variant: str, output_dir: Path):
+def _fit_and_save_training(
+    model,
+    data: pd.DataFrame,
+    variant: str,
+    output_dir: Path,
+    *,
+    generator_name: str = "ctabgan_plus",
+    generator_config: Dict[str, Any] | None = None,
+):
     try:
         model.fit(data)
     except Exception:
-        _save_training_artifacts(model, variant, output_dir)
+        _save_training_artifacts(
+            model,
+            variant,
+            output_dir,
+            generator_name=generator_name,
+            generator_config=generator_config,
+            training_rows=len(data),
+        )
         raise
-    return _save_training_artifacts(model, variant, output_dir)
+    diagnostics = _save_training_artifacts(
+        model,
+        variant,
+        output_dir,
+        generator_name=generator_name,
+        generator_config=generator_config,
+        training_rows=len(data),
+    )
+    suffix = ".pt" if generator_name == "ctabgan_plus" else ".pkl"
+    diagnostics["checkpoint_saved"] = _atomic_checkpoint(
+        model, output_dir / f"model_checkpoint_{variant}{suffix}"
+    )
+    atomic_write_json(output_dir / f"training_diagnostics_{variant}.json", diagnostics)
+    if generator_name == "dp_cgan":
+        privacy = upstream_privacy_accounting(model, len(data), generator_config or {})
+        privacy["pipeline_privacy_scope"] = (
+            "Generator training only; A0 audit signals, weighting, evaluation, and released "
+            "artifacts are not covered by an end-to-end DP guarantee."
+        )
+        privacy["variant"] = variant
+        atomic_write_json(output_dir / f"privacy_accounting_{variant}.json", privacy)
+        diagnostics["privacy_accounting"] = privacy
+    return diagnostics
 
 
 def run_experiment(
@@ -313,6 +434,7 @@ def run_experiment(
     config["variants"] = variants
     config["smoke"] = bool(smoke)
     seed = int(config.get("seed", 42))
+    generator_name = str(config.get("generator_name", "ctabgan_plus")).lower()
     if smoke:
         config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
         config["generator"]["batch_size"] = int(config.get("smoke_batch_size", 64))
@@ -333,7 +455,8 @@ def run_experiment(
     fingerprint = _fingerprint(config, data_hash, code_hash)
     dataset_name = str(config.get("dataset_name", data_path.stem)).strip().lower()
     dataset_name = re.sub(r"[^a-z0-9_-]+", "_", dataset_name).strip("_") or "dataset"
-    run_name = f"{dataset_name}_ctabgan_{stage}_seed{seed}_{fingerprint[:10]}"
+    generator_tag = "ctabgan" if generator_name == "ctabgan_plus" else generator_name
+    run_name = f"{dataset_name}_{generator_tag}_{stage}_seed{seed}_{fingerprint[:10]}"
     output_dir = output_override or (project_root / config.get("results_dir", "results") / run_name)
     output_dir = output_dir.resolve()
 
@@ -373,6 +496,7 @@ def run_experiment(
         "code_sha256": code_hash,
         "smoke": smoke,
         "progress": progress,
+        "generator_name": generator_name,
         **runtime_manifest,
     }
     atomic_write_json(manifest_path, manifest)
@@ -395,9 +519,16 @@ def run_experiment(
     atomic_write_json(output_dir / "split_indices.json", splits.indices)
     real_eval = splits.val if stage == "val" else splits.test
     if adapter_factory is None:
-        make_adapter = lambda label: _adapter(config, device, seed, progress, label)
+        make_adapter = lambda variant: _adapter(
+            config,
+            device,
+            seed,
+            progress,
+            f"{generator_name} {variant} GAN training",
+            output_dir / "backend_work" / variant,
+        )
     else:
-        make_adapter = lambda label: adapter_factory()
+        make_adapter = lambda variant: adapter_factory()
 
     baseline_audit_path = output_dir / "baseline_synthetic_audit.csv"
     baseline_eval_path = output_dir / "synthetic_A0.csv"
@@ -411,10 +542,20 @@ def run_experiment(
             training_diagnostics_by_variant["A0"] = json.loads(
                 training_path.read_text(encoding="utf-8")
             )
+            privacy_path = output_dir / "privacy_accounting_A0.json"
+            if privacy_path.exists():
+                training_diagnostics_by_variant["A0"]["privacy_accounting"] = json.loads(
+                    privacy_path.read_text(encoding="utf-8")
+                )
     else:
-        baseline_model = make_adapter("A0 GAN training")
+        baseline_model = make_adapter("A0")
         training_diagnostics_by_variant["A0"] = _fit_and_save_training(
-            baseline_model, splits.train, "A0", output_dir
+            baseline_model,
+            splits.train,
+            "A0",
+            output_dir,
+            generator_name=generator_name,
+            generator_config=config["generator"],
         )
         baseline_audit = baseline_model.sample(len(splits.audit))
         raw_audit = getattr(baseline_model, "last_raw_sample", None)
@@ -640,6 +781,7 @@ def run_experiment(
             result.insert(2, "target_balance", task.get("balance", "unspecified"))
             task_results.append(result)
         result = pd.concat(task_results, ignore_index=True)
+        result.insert(1, "generator_name", generator_name)
         atomic_write_csv(path, result)
         return result
 
@@ -667,9 +809,14 @@ def run_experiment(
             retrain, selection_counts, diagnostics = _prepare_variant_data(
                 variant, splits.train, priorities, definitions, weighting, seed, output_dir
             )
-            model = make_adapter(f"{variant} GAN training")
+            model = make_adapter(variant)
             training_diagnostics_by_variant[variant] = _fit_and_save_training(
-                model, retrain, variant, output_dir
+                model,
+                retrain,
+                variant,
+                output_dir,
+                generator_name=generator_name,
+                generator_config=config["generator"],
             )
             synthetic = model.sample(len(splits.train))
             raw_synthetic = getattr(model, "last_raw_sample", None)
@@ -693,6 +840,7 @@ def run_experiment(
             privacy_max_query_rows=evaluation_cfg.get("privacy_max_query_rows"),
         )
         metrics["variant"] = variant
+        metrics["generator_name"] = generator_name
         metrics["training_rows"] = len(splits.train) if variant == "A0" else len(retrain)
         metrics["synthetic_rows"] = len(synthetic)
         if diagnostics:
@@ -704,6 +852,15 @@ def run_experiment(
             "warning_unstable_tail"
         )
         metrics["mixture_all_converged"] = training_audit.get("mixture_all_converged")
+        privacy = training_audit.get("privacy_accounting", {})
+        for key in (
+            "upstream_reported_epsilon",
+            "epsilon_recomputed_upstream_steps",
+            "epsilon_recomputed_actual_updates",
+            "privacy_claim_status",
+        ):
+            if key in privacy:
+                metrics[key] = privacy[key]
         atomic_write_json(metrics_path, metrics)
         atomic_write_csv(output_dir / f"feature_metrics_{variant}.csv", details)
         atomic_write_json(complete_marker, {"status": "complete"})
@@ -728,6 +885,7 @@ def run_experiment(
             output_dir / "utility_mixture_manifest.json",
             {
                 "evaluation_split": stage,
+                "generator_name": generator_name,
                 "utility_tasks": utility_tasks,
                 "utility_protocol": {
                     "decision_rule": "random_forest_argmax",

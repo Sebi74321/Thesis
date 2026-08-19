@@ -1,5 +1,6 @@
 {
   "dataset_name": "wids",
+  "generator_name": "ctabgan_plus",
   "data_path": "Real_Datasets/WiDS_cleaned.csv",
   "results_dir": "results",
   "target_col": "hospital_death",

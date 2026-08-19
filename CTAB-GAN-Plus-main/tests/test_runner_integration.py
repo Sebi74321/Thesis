@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pandas as pd
@@ -5,7 +6,9 @@ import pytest
 
 from xai_reweighting.run_ablation import (
     VALID_VARIANTS,
+    _adapter,
     _build_controlled_deltas,
+    _fit_and_save_training,
     build_parser,
     run_experiment,
 )
@@ -18,6 +21,9 @@ class FakeGenerator:
     def sample(self, n):
         return self.df.sample(n=n, replace=True, random_state=42).reset_index(drop=True)
 
+    def save_checkpoint(self, path):
+        path.write_text("fake checkpoint", encoding="utf-8")
+
 
 def test_progress_cli_modes():
     parser = build_parser()
@@ -25,6 +31,54 @@ def test_progress_cli_modes():
     assert parser.parse_args(
         ["--config", "config.json", "--progress", "off"]
     ).progress == "off"
+
+
+@pytest.mark.parametrize("generator_name", ["ctabgan_plus", "ctgan", "dp_cgan"])
+def test_ablation_adapter_uses_generator_registry(generator_name, tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_create(name, generator_config, **kwargs):
+        captured.update(name=name, generator_config=generator_config, **kwargs)
+        return object()
+
+    monkeypatch.setattr("xai_reweighting.generator_adapters.create_generator", fake_create)
+    result = _adapter(
+        {"generator_name": generator_name, "generator": {"epochs": 2}},
+        "cpu",
+        42,
+        "off",
+        "test training",
+        tmp_path / "backend",
+    )
+
+    assert result is not None
+    assert captured["name"] == generator_name
+    assert captured["generator_config"] == {"epochs": 2}
+    assert captured["work_dir"] == tmp_path / "backend"
+
+
+def test_dp_weighted_fit_saves_checkpoint_and_variant_privacy(tmp_path):
+    model = FakeGenerator()
+    training = pd.DataFrame({"x": range(20), "target": [0, 1] * 10})
+    diagnostics = _fit_and_save_training(
+        model,
+        training,
+        "A5",
+        tmp_path,
+        generator_name="dp_cgan",
+        generator_config={
+            "batch_size": 10,
+            "epochs": 2,
+            "discriminator_steps": 10,
+        },
+    )
+
+    assert diagnostics["checkpoint_saved"] is True
+    assert (tmp_path / "model_checkpoint_A5.pkl").exists()
+    privacy = json.loads((tmp_path / "privacy_accounting_A5.json").read_text())
+    assert privacy["private"] is True
+    assert privacy["variant"] == "A5"
+    assert "not covered" in privacy["pipeline_privacy_scope"]
 
 
 def test_controlled_deltas_use_a0_and_real_utility_references():
@@ -119,6 +173,7 @@ def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch)
     assert "comparison_vs_A0" in summary
     assert "comparison_vs_real" in summary
     assert all((output / f"metrics_{variant}.json").exists() for variant in VALID_VARIANTS)
+    assert all((output / f"model_checkpoint_{variant}.pt").exists() for variant in VALID_VARIANTS)
     assert (output / "utility_real_only_baseline.csv").exists()
     assert (output / "utility_mixture_results.csv").exists()
     assert (output / "utility_mixture_summary.csv").exists()
