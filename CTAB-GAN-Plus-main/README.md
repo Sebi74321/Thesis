@@ -106,7 +106,10 @@ This never fits a generator. It verifies the source-data hash and saved
 schemas, then refreshes per-variant fidelity, tail, utility, privacy and
 detector metrics; real-only and mixed utility; A0/real controlled deltas; and
 diagnostic analyses. Progress and completion are recorded in
-`evaluation_rerun_manifest.json`. In the orchestration notebook, select the
+`evaluation_rerun_manifest.json`. Requested variants without a corresponding
+`synthetic_<variant>.csv` are reported and skipped, which allows older runs
+without A3 to be reevaluated using the current default variant list. The
+manifest records both evaluated and skipped variants. In the orchestration notebook, select the
 completed seed and set `RERUN_EVALUATION=True` to run the same command.
 
 

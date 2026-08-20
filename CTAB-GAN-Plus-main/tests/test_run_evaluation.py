@@ -123,7 +123,7 @@ def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
 
     output = run_existing_evaluation(
         run_dir,
-        ["A5"],
+        ["A3", "A5"],
         progress="off",
         run_diagnostics=False,
         run_mixed_utility=False,
@@ -143,6 +143,24 @@ def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
     rerun = json.loads((run_dir / "evaluation_rerun_manifest.json").read_text())
     assert rerun["status"] == "complete"
     assert rerun["training_performed"] is False
+    assert rerun["variants_requested"] == ["A3", "A5"]
+    assert rerun["variants"] == ["A0", "A5"]
+    assert rerun["variants_skipped_missing"] == ["A3"]
+
+
+def test_reevaluation_fails_only_when_no_requested_synthetic_data_exists(tmp_path):
+    run_dir = _completed_run(tmp_path)
+    (run_dir / "synthetic_A0.csv").unlink()
+    (run_dir / "synthetic_A5.csv").unlink()
+
+    with pytest.raises(FileNotFoundError, match="None of the requested"):
+        run_existing_evaluation(
+            run_dir,
+            ["A3"],
+            progress="off",
+            run_diagnostics=False,
+            run_mixed_utility=False,
+        )
 
 
 def test_reevaluation_rejects_invalid_saved_schema(tmp_path, monkeypatch):

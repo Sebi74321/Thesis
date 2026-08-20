@@ -52,27 +52,32 @@ def _resolve_variants(
     config: dict[str, Any],
     manifest: dict[str, Any],
     run_dir: Path,
-) -> list[str]:
+) -> tuple[list[str], list[str], list[str]]:
     configured = (
         config.get("variants") or manifest.get("variants_completed") or VALID_VARIANTS
     )
-    variants = [str(value).upper() for value in (requested or configured)]
-    variants = list(dict.fromkeys(variants))
-    invalid = sorted(set(variants) - set(VALID_VARIANTS))
+    requested_variants = [str(value).upper() for value in (requested or configured)]
+    requested_variants = list(dict.fromkeys(requested_variants))
+    invalid = sorted(set(requested_variants) - set(VALID_VARIANTS))
     if invalid:
         raise ValueError(f"Unknown ablation variants: {invalid}")
+    if not requested_variants:
+        raise ValueError("At least one completed variant is required")
+    variants = requested_variants.copy()
     if "A0" not in variants and (run_dir / "synthetic_A0.csv").is_file():
         variants.insert(0, "A0")
-    if not variants:
-        raise ValueError("At least one completed variant is required")
     missing = [
         variant
         for variant in variants
         if not (run_dir / f"synthetic_{variant}.csv").is_file()
     ]
-    if missing:
-        raise FileNotFoundError(f"Saved synthetic datasets are missing for: {missing}")
-    return variants
+    available = [variant for variant in variants if variant not in set(missing)]
+    if not available:
+        raise FileNotFoundError(
+            "None of the requested ablation variants has a saved synthetic dataset; "
+            f"missing: {missing}"
+        )
+    return available, missing, requested_variants
 
 
 def _real_only_utility(
@@ -152,7 +157,15 @@ def run_existing_evaluation(
         raise ValueError(f"Unknown persisted evaluation stage: {stage}")
     real_train = _take_rows(data, indices, "train")
     real_eval = _take_rows(data, indices, stage)
-    selected_variants = _resolve_variants(variants, config, manifest, run_dir)
+    selected_variants, skipped_variants, requested_variants = _resolve_variants(
+        variants, config, manifest, run_dir
+    )
+    if skipped_variants:
+        print(
+            "Skipping unavailable ablation variants with no saved synthetic dataset: "
+            + ", ".join(skipped_variants),
+            flush=True,
+        )
     continuous = config.get(
         "continuous_cols",
         [column for column in data.columns if column not in config["categorical_cols"]],
@@ -174,7 +187,9 @@ def run_existing_evaluation(
         "training_performed": False,
         "stage": stage,
         "seed": int(config.get("seed", 42)),
+        "variants_requested": requested_variants,
         "variants": selected_variants,
+        "variants_skipped_missing": skipped_variants,
         "data_sha256": data_hash,
         "evaluation_code_sha256": combined_sha256(code_files),
         "diagnostics_requested": bool(run_diagnostics),
@@ -323,7 +338,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", required=True, type=Path)
     parser.add_argument(
         "--variants",
-        help="Comma-separated completed variants; defaults to all variants recorded by the run",
+        help=(
+            "Comma-separated variants; missing synthetic datasets are reported and skipped. "
+            "Defaults to all variants recorded by the run"
+        ),
     )
     parser.add_argument("--progress", choices=("auto", "on", "off"), default="auto")
     parser.add_argument("--skip-diagnostics", action="store_true")
