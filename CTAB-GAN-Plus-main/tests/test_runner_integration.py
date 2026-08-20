@@ -179,6 +179,11 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
     assert "comparison_vs_real" in summary
     assert all((output / f"metrics_{variant}.json").exists() for variant in VALID_VARIANTS)
     assert all((output / f"model_checkpoint_{variant}.pt").exists() for variant in VALID_VARIANTS)
+    top_shap_metrics = pd.read_csv(output / "top_shap_feature_variant_metrics.csv")
+    assert set(top_shap_metrics["variant"]) == set(VALID_VARIANTS)
+    assert {"distribution_discrepancy", "delta_discrepancy_vs_A0"}.issubset(
+        top_shap_metrics.columns
+    )
     assert (output / "utility_real_only_baseline.csv").exists()
     assert (output / "utility_mixture_results.csv").exists()
     assert (output / "utility_mixture_summary.csv").exists()

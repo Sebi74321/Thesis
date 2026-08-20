@@ -13,6 +13,81 @@ from .diagnostics import _categorical, _js_distance, _scale
 from .evaluation import evaluate_utility
 
 
+def top_shap_feature_variant_metrics(
+    ranking: pd.DataFrame,
+    feature_metrics_by_variant: Mapping[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Track validation/test fidelity of A0's top SHAP features across variants.
+
+    Continuous features use IQR-scaled Wasserstein distance and categorical
+    features use Jensen-Shannon distance. Both are distribution discrepancies,
+    so lower values and negative deltas versus A0 indicate improvement.
+    """
+    required = {"feature", "shap_rank", "shap_raw"}
+    if not required.issubset(ranking.columns):
+        raise ValueError(f"ranking must contain {sorted(required)}")
+    if "selected_for_conditional_diagnostic" in ranking:
+        selected = ranking[ranking["selected_for_conditional_diagnostic"].astype(bool)].copy()
+    else:
+        selected = ranking.copy()
+    selected = selected.sort_values("shap_rank", kind="mergesort")
+
+    rows: list[dict] = []
+    for variant, metrics in feature_metrics_by_variant.items():
+        if "feature" not in metrics:
+            raise ValueError(f"Feature metrics for {variant} do not contain 'feature'")
+        indexed = metrics.drop_duplicates("feature").set_index("feature")
+        for top in selected.to_dict(orient="records"):
+            feature = str(top["feature"])
+            if feature not in indexed.index:
+                continue
+            values = indexed.loc[feature]
+            kind = str(values.get("kind", "unknown"))
+            if kind == "continuous" or pd.notna(values.get("wasserstein_scaled", np.nan)):
+                metric_name = "wasserstein_scaled"
+            elif kind == "categorical" or pd.notna(values.get("jensen_shannon", np.nan)):
+                metric_name = "jensen_shannon"
+            else:
+                metric_name = "unavailable"
+            discrepancy = (
+                float(values.get(metric_name))
+                if metric_name != "unavailable" and pd.notna(values.get(metric_name))
+                else np.nan
+            )
+            rows.append(
+                {
+                    "variant": str(variant),
+                    "feature": feature,
+                    "kind": kind,
+                    "shap_rank": int(top["shap_rank"]),
+                    "shap_raw": float(top["shap_raw"]),
+                    "discrepancy_metric": metric_name,
+                    "distribution_discrepancy": discrepancy,
+                }
+            )
+
+    result = pd.DataFrame(rows)
+    if result.empty:
+        return result
+    baseline = (
+        result[result["variant"] == "A0"]
+        .drop_duplicates("feature")
+        .set_index("feature")["distribution_discrepancy"]
+    )
+    result["a0_distribution_discrepancy"] = result["feature"].map(baseline)
+    result["delta_discrepancy_vs_A0"] = (
+        result["distribution_discrepancy"] - result["a0_distribution_discrepancy"]
+    )
+    denominator = result["a0_distribution_discrepancy"].replace(0.0, np.nan)
+    result["relative_change_vs_A0"] = result["delta_discrepancy_vs_A0"] / denominator
+    result["improved_vs_A0"] = result["delta_discrepancy_vs_A0"] < 0
+    variant_order = {variant: index for index, variant in enumerate(("A0", "A1", "A2", "A3", "A4", "A5"))}
+    result["_variant_order"] = result["variant"].map(variant_order).fillna(len(variant_order))
+    return result.sort_values(["shap_rank", "_variant_order", "variant"]).drop(
+        columns="_variant_order"
+    ).reset_index(drop=True)
+
+
 def _target_association(frame: pd.DataFrame, feature: str, target: str, categorical: bool) -> float:
     target_values = _categorical(frame[target])
     if target_values.nunique() < 2:

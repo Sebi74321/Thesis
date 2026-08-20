@@ -14,6 +14,7 @@ import pandas as pd
 from .evaluation import evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import evaluate_real_only_baseline
+from .priority_diagnostics import top_shap_feature_variant_metrics
 from .run_ablation import VALID_VARIANTS, _build_controlled_deltas
 from .run_diagnostics import run_existing_diagnostics
 from .run_mixed_utility import run_existing_mixed_utility
@@ -217,6 +218,7 @@ def run_existing_evaluation(
             )
 
         metrics_by_variant: dict[str, dict[str, Any]] = {}
+        feature_details_by_variant: dict[str, pd.DataFrame] = {}
         rows = []
         evaluation_cfg = config.get("evaluation", {})
         for position, variant in enumerate(selected_variants, start=1):
@@ -248,6 +250,7 @@ def run_existing_evaluation(
             metrics["synthetic_rows"] = len(synthetic)
             atomic_write_json(previous_path, metrics)
             atomic_write_csv(run_dir / f"feature_metrics_{variant}.csv", details)
+            feature_details_by_variant[variant] = details
             metrics_by_variant[variant] = metrics
             rows.append(metrics)
 
@@ -261,6 +264,15 @@ def run_existing_evaluation(
             report("Recomputing detector, priority, and feature-exclusion diagnostics")
             run_existing_diagnostics(config_path, run_dir)
 
+        ranking_path = run_dir / "baseline_detector_feature_ranking.csv"
+        if ranking_path.exists() and feature_details_by_variant:
+            atomic_write_csv(
+                run_dir / "top_shap_feature_variant_metrics.csv",
+                top_shap_feature_variant_metrics(
+                    pd.read_csv(ranking_path), feature_details_by_variant
+                ),
+            )
+
         rerun_manifest.update(
             {
                 "status": "complete",
@@ -271,6 +283,11 @@ def run_existing_evaluation(
                     "feature_metrics_<variant>.csv",
                     "ablation_summary.csv",
                     "ablation_deltas.csv",
+                    *(
+                        ["top_shap_feature_variant_metrics.csv"]
+                        if (run_dir / "top_shap_feature_variant_metrics.csv").is_file()
+                        else []
+                    ),
                     "utility_real_only_baseline.csv",
                     *(
                         [

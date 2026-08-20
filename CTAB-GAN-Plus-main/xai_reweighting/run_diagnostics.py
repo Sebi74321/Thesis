@@ -10,7 +10,11 @@ import pandas as pd
 
 from .diagnostics import baseline_detector_diagnostics
 from .io_utils import atomic_write_csv, file_sha256
-from .priority_diagnostics import feature_exclusion_sensitivity, prioritized_feature_diagnostics
+from .priority_diagnostics import (
+    feature_exclusion_sensitivity,
+    prioritized_feature_diagnostics,
+    top_shap_feature_variant_metrics,
+)
 from .scoring import correlation_groups
 
 
@@ -117,6 +121,15 @@ def run_existing_diagnostics(
         )
         atomic_write_csv(run_dir / "feature_family_detector_sensitivity.csv", detector_sensitivity)
         atomic_write_csv(run_dir / "feature_family_utility_sensitivity.csv", utility_sensitivity)
+    feature_metrics_by_variant = {
+        path.stem.removeprefix("feature_metrics_"): pd.read_csv(path)
+        for path in sorted(run_dir.glob("feature_metrics_A*.csv"))
+    }
+    if feature_metrics_by_variant:
+        atomic_write_csv(
+            run_dir / "top_shap_feature_variant_metrics.csv",
+            top_shap_feature_variant_metrics(ranking, feature_metrics_by_variant),
+        )
     return run_dir
 
 

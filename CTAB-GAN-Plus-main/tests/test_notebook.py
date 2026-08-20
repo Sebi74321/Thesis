@@ -19,6 +19,8 @@ def test_orchestrator_notebook_is_valid_and_code_cells_compile():
     assert "xai_reweighting.run_evaluation" in source
     assert "ablation_summary.csv" in source
     assert "feature_scores_" in source
+    assert "top_shap_feature_variant_metrics.csv" in source
+    assert "delta_discrepancy_vs_A0" in source
 
 
 def test_rq1_notebook_is_valid_and_safe_by_default():

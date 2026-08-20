@@ -28,7 +28,11 @@ from .mixed_utility import (
     evaluate_real_only_baseline,
     summarize_mixed_utility,
 )
-from .priority_diagnostics import feature_exclusion_sensitivity, prioritized_feature_diagnostics
+from .priority_diagnostics import (
+    feature_exclusion_sensitivity,
+    prioritized_feature_diagnostics,
+    top_shap_feature_variant_metrics,
+)
 from .scoring import (
     build_region_definitions,
     correlation_groups,
@@ -789,6 +793,7 @@ def run_experiment(
 
     rows: List[Dict[str, Any]] = []
     metrics_by_variant: Dict[str, Dict[str, Any]] = {}
+    feature_details_by_variant: Dict[str, pd.DataFrame] = {}
     for variant in variants:
         complete_marker = output_dir / f".{variant}.complete"
         metrics_path = output_dir / f"metrics_{variant}.json"
@@ -796,6 +801,9 @@ def run_experiment(
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             metrics_by_variant[variant] = metrics
             rows.append({"variant": variant, **metrics})
+            feature_path = output_dir / f"feature_metrics_{variant}.csv"
+            if feature_path.exists():
+                feature_details_by_variant[variant] = pd.read_csv(feature_path)
             if mixed_enabled:
                 synthetic_path = output_dir / f"synthetic_{variant}.csv"
                 mixed_results.append(
@@ -865,6 +873,7 @@ def run_experiment(
                 metrics[key] = privacy[key]
         atomic_write_json(metrics_path, metrics)
         atomic_write_csv(output_dir / f"feature_metrics_{variant}.csv", details)
+        feature_details_by_variant[variant] = details
         atomic_write_json(complete_marker, {"status": "complete"})
         if mixed_enabled:
             mixed_results.append(mixed_utility_for_variant(variant, synthetic))
@@ -876,6 +885,14 @@ def run_experiment(
     )
     atomic_write_csv(output_dir / "ablation_summary.csv", summary)
     atomic_write_csv(output_dir / "ablation_deltas.csv", delta_rows)
+    ranking_path = output_dir / "baseline_detector_feature_ranking.csv"
+    if ranking_path.exists() and feature_details_by_variant:
+        atomic_write_csv(
+            output_dir / "top_shap_feature_variant_metrics.csv",
+            top_shap_feature_variant_metrics(
+                pd.read_csv(ranking_path), feature_details_by_variant
+            ),
+        )
     if mixed_enabled and mixed_results:
         mixed_all = pd.concat(mixed_results, ignore_index=True)
         atomic_write_csv(output_dir / "utility_mixture_results.csv", mixed_all)

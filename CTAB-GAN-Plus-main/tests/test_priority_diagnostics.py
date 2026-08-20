@@ -6,7 +6,47 @@ import pandas as pd
 from xai_reweighting.priority_diagnostics import (
     feature_exclusion_sensitivity,
     prioritized_feature_diagnostics,
+    top_shap_feature_variant_metrics,
 )
+
+
+def test_top_shap_feature_metrics_track_each_variant_and_delta_vs_a0():
+    ranking = pd.DataFrame(
+        {
+            "feature": ["continuous", "category", "ignored"],
+            "shap_rank": [1, 2, 3],
+            "shap_raw": [0.6, 0.3, 0.1],
+            "selected_for_conditional_diagnostic": [True, True, False],
+        }
+    )
+    metrics = {
+        "A0": pd.DataFrame(
+            {
+                "feature": ["continuous", "category"],
+                "kind": ["continuous", "categorical"],
+                "wasserstein_scaled": [0.5, np.nan],
+                "jensen_shannon": [np.nan, 0.1],
+            }
+        ),
+        "A3": pd.DataFrame(
+            {
+                "feature": ["continuous", "category"],
+                "kind": ["continuous", "categorical"],
+                "wasserstein_scaled": [0.3, np.nan],
+                "jensen_shannon": [np.nan, 0.15],
+            }
+        ),
+    }
+
+    result = top_shap_feature_variant_metrics(ranking, metrics).set_index(["variant", "feature"])
+
+    assert set(result.reset_index()["feature"]) == {"continuous", "category"}
+    assert result.loc[("A3", "continuous"), "discrepancy_metric"] == "wasserstein_scaled"
+    assert np.isclose(result.loc[("A3", "continuous"), "delta_discrepancy_vs_A0"], -0.2)
+    assert np.isclose(result.loc[("A3", "continuous"), "relative_change_vs_A0"], -0.4)
+    assert bool(result.loc[("A3", "continuous"), "improved_vs_A0"])
+    assert np.isclose(result.loc[("A3", "category"), "delta_discrepancy_vs_A0"], 0.05)
+    assert not bool(result.loc[("A3", "category"), "improved_vs_A0"])
 
 
 def test_priority_diagnostics_flag_artifact_patterns_and_detector_dependence():

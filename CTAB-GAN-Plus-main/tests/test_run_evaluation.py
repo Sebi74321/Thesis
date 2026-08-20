@@ -69,6 +69,14 @@ def _completed_run(tmp_path):
     (run_dir / "metrics_A5.json").write_text(
         json.dumps({"training_rows": 9, "weight_mean": 1.7}), encoding="utf-8"
     )
+    pd.DataFrame(
+        {
+            "feature": ["value"],
+            "shap_rank": [1],
+            "shap_raw": [1.0],
+            "selected_for_conditional_diagnostic": [True],
+        }
+    ).to_csv(run_dir / "baseline_detector_feature_ranking.csv", index=False)
     return run_dir
 
 
@@ -99,7 +107,13 @@ def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
         score = 0.7 if synthetic["value"].iloc[0] == 0 else 0.8
         return (
             {"utility_mortality_roc_auc": score, "detector_auc": 1.0 - score},
-            pd.DataFrame({"feature": ["value"], "wasserstein_scaled": [score]}),
+            pd.DataFrame(
+                {
+                    "feature": ["value"],
+                    "kind": ["continuous"],
+                    "wasserstein_scaled": [score],
+                }
+            ),
         )
 
     monkeypatch.setattr(
@@ -122,6 +136,10 @@ def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
     assert summary.loc["A5", "delta_utility_mortality_roc_auc_vs_real"] == pytest.approx(-0.1)
     assert summary.loc["A5", "training_rows"] == 9
     assert summary.loc["A5", "weight_mean"] == 1.7
+    top_features = pd.read_csv(run_dir / "top_shap_feature_variant_metrics.csv").set_index(
+        ["variant", "feature"]
+    )
+    assert top_features.loc[("A5", "value"), "delta_discrepancy_vs_A0"] == pytest.approx(0.1)
     rerun = json.loads((run_dir / "evaluation_rerun_manifest.json").read_text())
     assert rerun["status"] == "complete"
     assert rerun["training_performed"] is False

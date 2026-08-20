@@ -46,6 +46,12 @@ family, or every selected feature, is ignored. The latter covers both mortality
 and gender utility. These are evaluation-only sensitivity analyses; they do not
 remove the columns from GAN training.
 
+`top_shap_feature_variant_metrics.csv` follows the A0 detector's top SHAP
+features across every ablation variant on the frozen evaluation split. It uses
+IQR-scaled Wasserstein distance for continuous features and Jensen-Shannon
+distance for categorical features, with absolute and relative changes versus
+A0. Negative deltas indicate improved feature-level fidelity.
+
 ### Controlled ablation deltas
 
 The primary ablation reference is always A0. `ablation_deltas.csv` therefore
