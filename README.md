@@ -44,7 +44,7 @@ presented as independently verified formal privacy guarantees.
 
 ## XAI-guided weighted retraining
 
-The runner implements the MIMIC and WiDS variants `A0,A1,A2,A4,A5` for
+The runner implements the MIMIC and WiDS variants `A0,A1,A2,A3,A4,A5` for
 CTAB-GAN+, CTGAN, and DP-CGAN. Run it from `CTAB-GAN-Plus-main` and select the
 framework through the configuration file.
 

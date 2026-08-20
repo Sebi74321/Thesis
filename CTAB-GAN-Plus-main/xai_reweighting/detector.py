@@ -96,7 +96,7 @@ def train_detector(
         try:
             import shap
         except ImportError as exc:
-            raise RuntimeError("SHAP is required for A4/A5; install the base requirements") from exc
+            raise RuntimeError("SHAP is required for A3/A4/A5; install the base requirements") from exc
         if len(X_test_p) > shap_max_rows:
             rng = np.random.default_rng(seed)
             selected = rng.choice(len(X_test_p), shap_max_rows, replace=False)

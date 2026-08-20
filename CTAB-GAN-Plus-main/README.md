@@ -49,7 +49,7 @@ remove the columns from GAN training.
 ### Controlled ablation deltas
 
 The primary ablation reference is always A0. `ablation_deltas.csv` therefore
-contains `A1-A0`, `A2-A0`, `A4-A0`, and `A5-A0` comparisons (plus the zero
+contains `A1-A0`, `A2-A0`, `A3-A0`, `A4-A0`, and `A5-A0` comparisons (plus the zero
 `A0-A0` reference) for fidelity, tail, detector, utility, and privacy-proxy
 metrics. It also contains one `<variant>-REAL` row per variant for downstream
 utility metrics. The real reference is trained on `real_train` and evaluated on
@@ -58,13 +58,13 @@ the same frozen validation or test split as the synthetic-data utility models.
 `ablation_summary.csv` exposes the same values as
 `delta_<metric>_vs_A0`, and utility-only `delta_<metric>_vs_real` columns along
 with the corresponding `real_baseline_<metric>` value. Sequential comparisons
-such as A5 versus A4 remain available only as explicitly named
+such as A3 versus A1 and A5 versus A4 remain available only as explicitly named
 `diagnostic_delta_<metric>_vs_previous` columns; they are not treated as the
 main controlled effect.
 
 ### Weighted retraining across GAN frameworks
 
-The same A0/A1/A2/A4/A5 runner supports `ctabgan_plus`, `ctgan`, and the
+The same A0/A1/A2/A3/A4/A5 runner supports `ctabgan_plus`, `ctgan`, and the
 upstream-private `dp_cgan` adapter. Select the framework through its config;
 the split, A0-derived audit signals, augmentation size, evaluation protocol,
 and controlled deltas remain identical:
@@ -92,7 +92,7 @@ recomputed from its persisted split indices and saved synthetic CSV files:
 ```bash
 python -m xai_reweighting.run_evaluation \
   --run-dir results/<completed-run-directory> \
-  --variants A0,A1,A2,A4,A5 \
+  --variants A0,A1,A2,A3,A4,A5 \
   --progress on
 ```
 

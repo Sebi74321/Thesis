@@ -32,11 +32,15 @@ def test_normalize_signal_handles_zero_and_scale():
 
 def test_variant_formulas_and_tail_isolation():
     a2 = compute_feature_priority(_components(1.0), "A2", top_k=3).set_index("feature")
+    a3 = compute_feature_priority(_components(1.0), "A3", top_k=3).set_index("feature")
     a4 = compute_feature_priority(_components(1.0), "A4", top_k=3).set_index("feature")
     a5_without = compute_feature_priority(_components(0.0), "A5", top_k=3).set_index("feature")
     a5_with = compute_feature_priority(_components(1.0), "A5", top_k=3).set_index("feature")
     assert a2.loc["x", "combined_raw"] == 0.0
     assert a2.loc["z", "combined_raw"] == 0.0
+    assert a3.loc["x", "combined_raw"] == 1.0
+    assert a3.loc["y", "combined_raw"] == 0.0
+    assert a3.loc["z", "combined_raw"] == 0.0
     assert np.isclose(a4.loc["x", "combined_raw"], 0.625)
     assert np.isclose(a4.loc["y", "combined_raw"], 0.375)
     assert a4.loc["z", "combined_raw"] == 0.0
@@ -44,6 +48,19 @@ def test_variant_formulas_and_tail_isolation():
     assert np.isclose(a5_with.loc["y", "combined_raw"], 0.3)
     assert np.isclose(a5_with.loc["z", "combined_raw"], 0.2)
     assert a5_without.loc["z", "combined_raw"] != a5_with.loc["z", "combined_raw"]
+
+
+def test_a3_ignores_mismatch_and_tail_signals():
+    first = _components(0.0)
+    changed = first.copy()
+    changed["mismatch"] = [0.0, 0.25, 0.75]
+    changed["tail"] = [0.2, 0.3, 0.5]
+
+    original = compute_feature_priority(first, "A3", top_k=3).set_index("feature")
+    modified = compute_feature_priority(changed, "A3", top_k=3).set_index("feature")
+
+    pd.testing.assert_series_equal(original["combined_raw"], modified["combined_raw"])
+    pd.testing.assert_series_equal(original["priority"], modified["priority"])
 
 
 def test_duplicate_quantiles_missing_values_and_weight_bounds():

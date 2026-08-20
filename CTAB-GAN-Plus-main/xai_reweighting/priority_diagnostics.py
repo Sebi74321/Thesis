@@ -1,4 +1,4 @@
-"""Artifact-oriented diagnostics for the features selected by A2/A4/A5."""
+"""Artifact-oriented diagnostics for the features selected by A2/A3/A4/A5."""
 
 from __future__ import annotations
 

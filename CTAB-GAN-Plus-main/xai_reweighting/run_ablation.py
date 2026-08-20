@@ -1,4 +1,4 @@
-"""CLI runner for the A0/A1/A2/A4/A5 weighted-retraining experiment."""
+"""CLI runner for the A0/A1/A2/A3/A4/A5 weighted-retraining experiment."""
 
 from __future__ import annotations
 
@@ -38,9 +38,11 @@ from .scoring import (
     weight_diagnostics,
 )
 
-VALID_VARIANTS = ("A0", "A1", "A2", "A4", "A5")
+VALID_VARIANTS = ("A0", "A1", "A2", "A3", "A4", "A5")
 VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
-PREVIOUS = {"A1": "A0", "A2": "A1", "A4": "A2", "A5": "A4"}
+# Mechanism controls: A2/A3 are each compared with uniform augmentation,
+# A4 adds SHAP to mismatch, and A5 adds the explicit tail signal.
+PREVIOUS = {"A1": "A0", "A2": "A1", "A3": "A1", "A4": "A2", "A5": "A4"}
 
 
 def _numeric_metric_delta(current: Dict[str, Any], reference: Dict[str, Any]) -> Dict[str, float]:
@@ -648,7 +650,7 @@ def run_experiment(
             ),
             exclude_features=weighting.get("exclude_features", []),
         )
-        for variant in ("A2", "A4", "A5")
+        for variant in ("A2", "A3", "A4", "A5")
     }
     for variant, priority in priorities.items():
         atomic_write_csv(output_dir / f"feature_scores_{variant}.csv", priority)

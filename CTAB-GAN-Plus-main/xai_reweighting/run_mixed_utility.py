@@ -141,7 +141,7 @@ def run_existing_mixed_utility(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, type=Path)
-    parser.add_argument("--variants", default="A0,A1,A2,A4,A5")
+    parser.add_argument("--variants", default="A0,A1,A2,A3,A4,A5")
     parser.add_argument("--repeats", type=int)
     parser.add_argument("--n-estimators", type=int)
     parser.add_argument("--n-jobs", type=int)

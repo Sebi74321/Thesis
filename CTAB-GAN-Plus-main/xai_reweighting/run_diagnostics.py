@@ -64,7 +64,7 @@ def run_existing_diagnostics(
     atomic_write_csv(run_dir / "baseline_conditional_detector_metrics.csv", detector_metrics)
 
     priorities = {}
-    for variant in ("A2", "A4", "A5"):
+    for variant in ("A2", "A3", "A4", "A5"):
         path = run_dir / f"feature_scores_{variant}.csv"
         if path.exists():
             priorities[variant] = pd.read_csv(path)

@@ -154,12 +154,14 @@ def compute_feature_priority(
     variant = variant.upper()
     if variant == "A2":
         combined = components["mismatch"].astype(float)
+    elif variant == "A3":
+        combined = components["shap"].astype(float)
     elif variant == "A4":
         combined = 0.625 * components["shap"] + 0.375 * components["mismatch"]
     elif variant == "A5":
         combined = 0.5 * components["shap"] + 0.3 * components["mismatch"] + 0.2 * components["tail"]
     else:
-        raise ValueError("Feature priorities are defined only for A2, A4, and A5")
+        raise ValueError("Feature priorities are defined only for A2, A3, A4, and A5")
 
     result = components.copy()
     result["combined_raw"] = combined

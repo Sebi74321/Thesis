@@ -84,7 +84,9 @@ def test_dp_weighted_fit_saves_checkpoint_and_variant_privacy(tmp_path):
 def test_controlled_deltas_use_a0_and_real_utility_references():
     metrics = {
         "A0": {"utility_mortality_roc_auc": 0.60, "detector_auc": 0.90},
+        "A1": {"utility_mortality_roc_auc": 0.65, "detector_auc": 0.85},
         "A2": {"utility_mortality_roc_auc": 0.70, "detector_auc": 0.80},
+        "A3": {"utility_mortality_roc_auc": 0.72, "detector_auc": 0.78},
         "A5": {"utility_mortality_roc_auc": 0.75, "detector_auc": 0.70},
     }
     real_only = pd.DataFrame(
@@ -103,7 +105,10 @@ def test_controlled_deltas_use_a0_and_real_utility_references():
     )
 
     a5 = summary.set_index("variant").loc["A5"]
+    a3 = summary.set_index("variant").loc["A3"]
     assert a5["delta_utility_mortality_roc_auc_vs_A0"] == pytest.approx(0.15)
+    assert a3["sequential_comparison"] == "A3-A1"
+    assert a3["diagnostic_delta_utility_mortality_roc_auc_vs_previous"] == pytest.approx(0.07)
     assert a5["real_baseline_utility_mortality_roc_auc"] == pytest.approx(0.81)
     assert a5["delta_utility_mortality_roc_auc_vs_real"] == pytest.approx(-0.06)
     assert set(deltas["reference_type"]) == {
@@ -113,7 +118,7 @@ def test_controlled_deltas_use_a0_and_real_utility_references():
     assert "A5-A2" not in set(deltas["comparison"])
 
 
-def test_all_five_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
+def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
     project = tmp_path / "project"
     data_dir = project / "data"
     data_dir.mkdir(parents=True)
