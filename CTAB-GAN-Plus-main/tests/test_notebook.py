@@ -21,6 +21,11 @@ def test_orchestrator_notebook_is_valid_and_code_cells_compile():
     assert "feature_scores_" in source
     assert "top_shap_feature_variant_metrics.csv" in source
     assert "delta_discrepancy_vs_A0" in source
+    assert 'sharey=False' in source
+    assert 'sharex=False' in source
+    assert 'facet_kws={"sharey": False}' not in source
+    assert 'axis.set_xlabel("Variant")' in source
+    assert 'axis.set_ylabel("Discrepancy delta vs A0")' in source
 
 
 def test_rq1_notebook_is_valid_and_safe_by_default():
