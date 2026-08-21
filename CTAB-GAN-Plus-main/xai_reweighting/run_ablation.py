@@ -323,6 +323,11 @@ def _save_training_artifacts(
     decimals = getattr(model, "decimals", None)
     if decimals:
         atomic_write_json(output_dir / f"measurement_precision_{variant}.json", decimals)
+    numeric_constraints = getattr(model, "numeric_constraints", None)
+    if numeric_constraints:
+        atomic_write_json(
+            output_dir / f"numeric_postprocessing_{variant}.json", numeric_constraints
+        )
     diagnostics["mixture_all_converged"] = (
         all(item.get("converged", False) for item in mixture) if mixture else None
     )
@@ -407,6 +412,14 @@ def _fit_and_save_training(
         atomic_write_json(output_dir / f"privacy_accounting_{variant}.json", privacy)
         diagnostics["privacy_accounting"] = privacy
     return diagnostics
+
+
+def _save_postprocessing_diagnostics(model, output_dir: Path, variant: str) -> None:
+    diagnostics = getattr(model, "last_postprocessing_diagnostics", None)
+    if diagnostics:
+        atomic_write_json(
+            output_dir / f"postprocessing_diagnostics_{variant}.json", diagnostics
+        )
 
 
 def run_experiment(
@@ -571,6 +584,7 @@ def run_experiment(
         raw_eval = getattr(baseline_model, "last_raw_sample", None)
         if raw_eval is not None:
             atomic_write_csv(output_dir / "synthetic_raw_A0.csv", raw_eval)
+        _save_postprocessing_diagnostics(baseline_model, output_dir, "A0")
         atomic_write_csv(baseline_audit_path, baseline_audit)
         atomic_write_csv(baseline_eval_path, baseline_eval)
 
@@ -832,6 +846,7 @@ def run_experiment(
             raw_synthetic = getattr(model, "last_raw_sample", None)
             if raw_synthetic is not None:
                 atomic_write_csv(output_dir / f"synthetic_raw_{variant}.csv", raw_synthetic)
+            _save_postprocessing_diagnostics(model, output_dir, variant)
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 

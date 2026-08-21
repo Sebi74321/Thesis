@@ -1,0 +1,7 @@
+score,variant,generator_name,training_rows,synthetic_rows,training_stability_status,training_warning_unstable_tail,mixture_all_converged,weight_mean,weight_fraction_capped,comparison_vs_A0,delta_score_vs_A0,delta_training_rows_vs_A0,delta_synthetic_rows_vs_A0,comparison_vs_real,sequential_comparison,diagnostic_delta_score_vs_previous,diagnostic_delta_training_rows_vs_previous,diagnostic_delta_synthetic_rows_vs_previous,diagnostic_delta_weight_mean_vs_previous,diagnostic_delta_weight_fraction_capped_vs_previous
+1.0,A0,ctabgan_plus,60,60,unavailable,,,,,A0-A0,0.0,0.0,0.0,A0-REAL,,,,,,
+1.0,A1,ctabgan_plus,75,60,unavailable,,,,,A1-A0,0.0,15.0,0.0,A1-REAL,A1-A0,0.0,15.0,0.0,,
+1.0,A2,ctabgan_plus,75,60,unavailable,,,1.1999999999999997,0.15,A2-A0,0.0,15.0,0.0,A2-REAL,A2-A1,0.0,0.0,0.0,,
+1.0,A3,ctabgan_plus,75,60,unavailable,,,1.1333333333333333,0.0,A3-A0,0.0,15.0,0.0,A3-REAL,A3-A1,0.0,0.0,0.0,,
+1.0,A4,ctabgan_plus,75,60,unavailable,,,1.1523809523809523,0.0,A4-A0,0.0,15.0,0.0,A4-REAL,A4-A2,0.0,0.0,0.0,-0.04761904761904745,-0.15
+1.0,A5,ctabgan_plus,75,60,unavailable,,,1.2,0.15,A5-A0,0.0,15.0,0.0,A5-REAL,A5-A4,0.0,0.0,0.0,0.04761904761904767,0.15

@@ -399,6 +399,15 @@ def run_model_comparison(
                 synthetic = model.sample(len(splits.train))
                 if len(synthetic) != len(splits.train) or list(synthetic.columns) != list(splits.train.columns):
                     raise RuntimeError("Generator output did not preserve row count and schema")
+                raw_synthetic = getattr(model, "last_raw_sample", None)
+                if raw_synthetic is not None:
+                    atomic_write_csv(run_dir / "synthetic_raw.csv", raw_synthetic)
+                numeric_constraints = getattr(model, "numeric_constraints", None)
+                if numeric_constraints:
+                    atomic_write_json(run_dir / "numeric_postprocessing.json", numeric_constraints)
+                postprocessing = getattr(model, "last_postprocessing_diagnostics", None)
+                if postprocessing:
+                    atomic_write_json(run_dir / "postprocessing_diagnostics.json", postprocessing)
                 atomic_write_csv(synthetic_path, synthetic)
                 privacy = _privacy_accounting(model, len(splits.train), model_config) if model_name == "dp_cgan" else {}
                 if privacy:

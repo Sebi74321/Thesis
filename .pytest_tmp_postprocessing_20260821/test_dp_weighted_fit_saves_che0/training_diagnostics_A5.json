@@ -1,0 +1,16 @@
+{
+  "batch_size_configured": 10,
+  "checkpoint_saved": true,
+  "convergence_warning_count": 0,
+  "convergence_warnings": [],
+  "discriminator_steps_configured": 10,
+  "discriminator_updates": 40,
+  "epochs_completed": 0,
+  "epochs_configured": 2,
+  "generator_name": "dp_cgan",
+  "generator_updates": 4,
+  "mixture_all_converged": null,
+  "status": "unavailable",
+  "steps_per_epoch": 2,
+  "training_rows": 20
+}

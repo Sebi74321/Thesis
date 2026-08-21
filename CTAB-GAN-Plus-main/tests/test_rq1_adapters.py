@@ -10,7 +10,9 @@ from model.pipeline.data_preparation import DataPrep
 from xai_reweighting.generator_adapters import (
     CTGANAdapter,
     DPCGANAdapter,
+    _apply_numeric_constraints,
     _decimal_places,
+    _infer_numeric_constraints,
     create_generator,
 )
 
@@ -123,6 +125,44 @@ def test_measurement_precision_inference_distinguishes_grids_from_continuous_val
     assert _decimal_places(one_decimal) == 1
     assert _decimal_places(integer_float) == 0
     assert _decimal_places(continuous) > 1
+
+
+def test_numeric_postprocessing_rounds_integer_valued_floats_without_clipping():
+    fitted = pd.DataFrame({
+        "spo2_max": [90.0, 95.0, 100.0],
+        "temperature": [36.1, 36.5, 37.2],
+    })
+    constraints = _infer_numeric_constraints(fitted)
+    raw = pd.DataFrame({
+        "spo2_max": [89.6, 95.6, 100.6],
+        "temperature": [35.96, 36.54, 37.26],
+    })
+
+    processed, diagnostics = _apply_numeric_constraints(raw, constraints)
+
+    assert constraints["spo2_max"]["integer_valued"] is True
+    assert processed["spo2_max"].tolist() == [90.0, 96.0, 100.6]
+    assert processed["temperature"].tolist() == [36.0, 36.5, 37.26]
+    assert diagnostics["spo2_max"]["generated_below_min_rows"] == 1
+    assert diagnostics["spo2_max"]["generated_above_max_rows"] == 1
+
+
+def test_rounding_guard_does_not_push_an_in_range_value_past_fitted_support():
+    constraints = {
+        "measurement": {
+            "decimals": 0,
+            "integer_valued": True,
+            "minimum": 0.25,
+            "maximum": 0.75,
+            "source_dtype": "float64",
+        }
+    }
+    processed, diagnostics = _apply_numeric_constraints(
+        pd.DataFrame({"measurement": [0.3, 0.7]}), constraints
+    )
+
+    assert processed["measurement"].tolist() == [0.3, 0.7]
+    assert diagnostics["measurement"]["rounding_guarded_rows"] == 2
 
 
 def test_positive_log_columns_round_trip_through_data_prep():

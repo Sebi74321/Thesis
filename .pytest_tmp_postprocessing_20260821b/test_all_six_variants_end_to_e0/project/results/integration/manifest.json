@@ -1,0 +1,24 @@
+{
+  "allow_tf32": false,
+  "code_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "completed_at": "2026-08-21T14:34:25.150283+00:00",
+  "data_sha256": "e170085aae6220140b1195e841cdb67e0403b5eca759f45d568049944d497bfb",
+  "deterministic": true,
+  "device": "cpu",
+  "elapsed_seconds": 10.452181577682495,
+  "fingerprint": "de2285b84ba8207b9815420871c9d8663d66cc837d76ff5d4d0f5641c613e768",
+  "generator_name": "ctabgan_plus",
+  "precision": "test-double",
+  "progress": "auto",
+  "smoke": false,
+  "started_at": "2026-08-21T14:34:14.698101+00:00",
+  "status": "complete",
+  "variants_completed": [
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5"
+  ]
+}

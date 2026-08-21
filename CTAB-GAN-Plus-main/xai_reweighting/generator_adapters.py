@@ -76,6 +76,69 @@ def _decimal_places(series: pd.Series, coverage: float = 0.99, max_places: int =
     return min(maximum, 12)
 
 
+def _infer_numeric_constraints(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Learn numeric measurement precision and finite support from fitted rows."""
+    constraints: Dict[str, Dict[str, Any]] = {}
+    for column in frame.columns:
+        dtype = frame[column].dtype
+        if is_bool_dtype(dtype) or not is_numeric_dtype(dtype):
+            continue
+        numeric = pd.to_numeric(frame[column], errors="coerce")
+        finite = numeric[np.isfinite(numeric)]
+        decimals = _decimal_places(frame[column])
+        constraints[column] = {
+            "decimals": int(decimals),
+            "integer_valued": bool(decimals == 0),
+            "minimum": float(finite.min()) if len(finite) else None,
+            "maximum": float(finite.max()) if len(finite) else None,
+            "source_dtype": str(dtype),
+        }
+    return constraints
+
+
+def _apply_numeric_constraints(
+    result: pd.DataFrame,
+    constraints: Mapping[str, Mapping[str, Any]],
+) -> tuple[pd.DataFrame, Dict[str, Dict[str, int]]]:
+    """Round measurements without hiding generator support violations."""
+    result = result.copy()
+    diagnostics: Dict[str, Dict[str, int]] = {}
+    for column, constraint in constraints.items():
+        if column not in result:
+            continue
+        values = pd.to_numeric(result[column], errors="raise")
+        non_missing = values.notna()
+        if not np.isfinite(values[non_missing].to_numpy(dtype=float)).all():
+            raise RuntimeError(f"Generator produced non-finite values for numeric column '{column}'")
+
+        rounded = values.round(int(constraint["decimals"]))
+        minimum = constraint.get("minimum")
+        maximum = constraint.get("maximum")
+        guarded = pd.Series(False, index=values.index)
+        if minimum is not None:
+            guarded |= (rounded < minimum) & (rounded < values)
+        if maximum is not None:
+            guarded |= (rounded > maximum) & (rounded > values)
+        rounded.loc[guarded] = values.loc[guarded]
+
+        changed = non_missing & ~np.isclose(
+            values.fillna(0.0).to_numpy(dtype=float),
+            rounded.fillna(0.0).to_numpy(dtype=float),
+            rtol=0.0,
+            atol=1e-12,
+        )
+        below = values < minimum if minimum is not None else pd.Series(False, index=values.index)
+        above = values > maximum if maximum is not None else pd.Series(False, index=values.index)
+        diagnostics[column] = {
+            "rounded_rows": int(np.sum(changed)),
+            "rounding_guarded_rows": int(guarded.sum()),
+            "generated_below_min_rows": int(below.sum()),
+            "generated_above_max_rows": int(above.sum()),
+        }
+        result[column] = rounded
+    return result, diagnostics
+
+
 @contextmanager
 def _working_directory(path: Path):
     previous = Path.cwd()
@@ -163,7 +226,9 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         self.columns = None
         self.dtypes = None
         self.decimals = {}
+        self.numeric_constraints = {}
         self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
         self.data_prep = None
         self.synthesizer = None
         self.discriminator_snapshots = []
@@ -178,7 +243,11 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         train_df = df.copy(deep=True).reset_index(drop=True)
         self.columns = train_df.columns.tolist()
         self.dtypes = train_df.dtypes.to_dict()
-        self.decimals = {column: _decimal_places(train_df[column]) for column in self.columns}
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
 
         # Passing a null problem type prevents DataPrep from performing its
         # legacy split. The real problem type is still supplied to the
@@ -224,9 +293,9 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         encoded = self.synthesizer.sample(n)
         result = self.data_prep.inverse_prep(encoded).loc[:, self.columns].reset_index(drop=True)
         self.last_raw_sample = result.copy(deep=True)
-        for column, decimals in self.decimals.items():
-            if column in result and is_numeric_dtype(self.dtypes[column]):
-                result[column] = pd.to_numeric(result[column], errors="raise").round(decimals)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
         result = _restore_schema(result, self.columns, self.dtypes)
         if len(result) != n:
             raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
@@ -243,6 +312,7 @@ class CTABGANPlusAdapter(GeneratorAdapter):
                 "columns": self.columns,
                 "dtypes": {key: str(value) for key, value in self.dtypes.items()},
                 "measurement_decimals": self.decimals,
+                "numeric_constraints": self.numeric_constraints,
             },
             path,
         )
@@ -299,6 +369,10 @@ class CTGANAdapter(GeneratorAdapter):
         }
         self.columns = None
         self.dtypes = None
+        self.decimals = {}
+        self.numeric_constraints = {}
+        self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
         self.model = None
         self.training_history = pd.DataFrame()
         self.mixture_diagnostics = []
@@ -316,6 +390,11 @@ class CTGANAdapter(GeneratorAdapter):
         train_df = df.copy(deep=True).reset_index(drop=True)
         self.columns = train_df.columns.tolist()
         self.dtypes = train_df.dtypes.to_dict()
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
         self.model = CTGAN(**self.model_kwargs)
         self.model.set_device(str(self.device))
         self._sample_calls = 0
@@ -338,7 +417,12 @@ class CTGANAdapter(GeneratorAdapter):
             return pd.DataFrame(columns=self.columns)
         seed_everything(self.seed + self._sample_calls, self.deterministic, self.allow_tf32)
         self._sample_calls += 1
-        result = _restore_schema(self.model.sample(n), self.columns, self.dtypes)
+        result = self.model.sample(n)
+        self.last_raw_sample = result.copy(deep=True)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
+        result = _restore_schema(result, self.columns, self.dtypes)
         if len(result) != n:
             raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
         return result
@@ -408,6 +492,9 @@ class DPCGANAdapter(GeneratorAdapter):
         self.columns = None
         self.dtypes = None
         self.decimals = {}
+        self.numeric_constraints = {}
+        self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
         self.model = None
         self.training_history = pd.DataFrame()
         self.mixture_diagnostics = []
@@ -427,7 +514,11 @@ class DPCGANAdapter(GeneratorAdapter):
         train_df = df.copy(deep=True).reset_index(drop=True)
         self.columns = train_df.columns.tolist()
         self.dtypes = train_df.dtypes.to_dict()
-        self.decimals = {column: _decimal_places(train_df[column]) for column in self.columns}
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
         for column in self.categorical_columns:
             train_df[column] = train_df[column].astype("object")
         self.model = DP_CGAN(**self.model_kwargs)
@@ -462,9 +553,10 @@ class DPCGANAdapter(GeneratorAdapter):
         self._sample_calls += 1
         with _working_directory(self.work_dir):
             result = self.model.sample(n)
-        for column, decimals in self.decimals.items():
-            if decimals and column in result:
-                result[column] = pd.to_numeric(result[column], errors="coerce").round(decimals)
+        self.last_raw_sample = result.copy(deep=True)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
         result = _restore_schema(result, self.columns, self.dtypes)
         if len(result) != n:
             raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
