@@ -31,6 +31,44 @@ class DetectorResult:
     shap_importance: pd.Series
 
 
+def _aggregate_encoded_shap(
+    values: np.ndarray,
+    continuous: Iterable[str],
+    categorical: Iterable[str],
+    category_sizes: Iterable[int],
+) -> pd.Series:
+    """Aggregate signed encoded SHAP contributions before measuring magnitude."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 2:
+        raise ValueError("Encoded SHAP values must be a two-dimensional array")
+    continuous = list(continuous)
+    categorical = list(categorical)
+    category_sizes = [int(size) for size in category_sizes]
+    if len(categorical) != len(category_sizes):
+        raise ValueError("Each categorical feature must have one encoded category count")
+
+    expected_columns = len(continuous) + sum(category_sizes)
+    if values.shape[1] != expected_columns:
+        raise RuntimeError(
+            "Could not map encoded SHAP values to original features: "
+            f"received {values.shape[1]} columns, expected {expected_columns}"
+        )
+
+    importance: Dict[str, float] = {}
+    offset = 0
+    for feature in continuous:
+        importance[feature] = float(np.mean(np.abs(values[:, offset])))
+        offset += 1
+    for feature, size in zip(categorical, category_sizes):
+        # A categorical feature is represented by several one-hot columns.
+        # Preserve their signs while grouping each row, then measure the
+        # magnitude of the original feature's combined contribution.
+        grouped_contribution = values[:, offset:offset + size].sum(axis=1)
+        importance[feature] = float(np.mean(np.abs(grouped_contribution)))
+        offset += size
+    return pd.Series(importance, dtype=float)
+
+
 def train_detector(
     real_df: pd.DataFrame,
     synthetic_df: pd.DataFrame,
@@ -108,16 +146,13 @@ def train_detector(
             values = values[1]
         elif isinstance(values, np.ndarray) and values.ndim == 3:
             values = values[:, :, 1]
-        mean_abs = np.abs(np.asarray(values)).mean(axis=0)
-
-        mapping = list(continuous)
+        category_sizes = []
         if categorical:
             encoder = preprocessor.named_transformers_["cat"].named_steps["onehot"]
-            for feature, categories in zip(categorical, encoder.categories_):
-                mapping.extend([feature] * len(categories))
-        if len(mapping) != len(mean_abs):
-            raise RuntimeError("Could not map encoded SHAP values to original features")
-        for feature, value in zip(mapping, mean_abs):
-            importance.loc[feature] += float(value)
+            category_sizes = [len(categories) for categories in encoder.categories_]
+        grouped_importance = _aggregate_encoded_shap(
+            np.asarray(values), continuous, categorical, category_sizes
+        )
+        importance.loc[grouped_importance.index] = grouped_importance
         importance = normalize_signal(importance)
     return DetectorResult(metrics, importance)

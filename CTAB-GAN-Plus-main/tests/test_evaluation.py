@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from xai_reweighting.detector import train_detector
+from xai_reweighting.detector import _aggregate_encoded_shap, train_detector
 from xai_reweighting.evaluation import (
     evaluate_fidelity_and_tails,
     evaluate_privacy,
@@ -62,6 +62,23 @@ def test_detector_accepts_equivalent_mixed_categorical_dtypes():
     )
 
     assert 0.0 <= result.metrics["detector_auc"] <= 1.0
+
+
+def test_categorical_shap_is_grouped_before_taking_absolute_mean():
+    # Encoded order: continuous x, category=a, category=b. The categorical
+    # dummy contributions cancel within each row and must therefore have zero
+    # grouped importance; summing their separate absolute means would be 1.3.
+    encoded_shap = np.array([
+        [1.0, 0.8, -0.8],
+        [-1.0, -0.5, 0.5],
+    ])
+
+    importance = _aggregate_encoded_shap(
+        encoded_shap, continuous=["x"], categorical=["category"], category_sizes=[2]
+    )
+
+    assert importance["x"] == 1.0
+    assert importance["category"] == 0.0
 
 
 def test_variant_reports_balanced_and_imbalanced_utility_separately():

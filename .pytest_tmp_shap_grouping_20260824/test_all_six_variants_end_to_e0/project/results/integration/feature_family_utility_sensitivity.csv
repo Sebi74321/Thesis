@@ -1,0 +1,6 @@
+utility_task,target_balance,exclusion,excluded_features,excluded_feature_count,status,target,positive_label,decision_rule,roc_auc,pr_auc,accuracy,balanced_accuracy,precision_macro,recall_macro,f1_macro,positive_precision,positive_recall,positive_f1,delta_roc_auc_vs_none,delta_pr_auc_vs_none,delta_accuracy_vs_none,delta_balanced_accuracy_vs_none,delta_f1_macro_vs_none,delta_positive_recall_vs_none
+mortality,imbalanced,none,,0,ok,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0
+mortality,imbalanced,family:category,category,1,ok,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0
+mortality,imbalanced,family:continuous,continuous,1,ok,target,1,random_forest_argmax,0.5,0.2,0.5,0.5,0.5,0.5,0.45054945054945056,0.2,0.5,0.2857142857142857,-0.5,-0.8,-0.5,-0.5,-0.5494505494505495,-0.5
+mortality,imbalanced,family:target,target,1,ok,target,1,random_forest_argmax,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0
+mortality,imbalanced,all_selected,category|continuous|target,3,no_predictors_remaining,target,1,unavailable,,,,,,,,,,,,,,,,
