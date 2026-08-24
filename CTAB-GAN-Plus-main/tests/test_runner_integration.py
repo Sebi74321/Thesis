@@ -1,8 +1,10 @@
 import json
 from types import SimpleNamespace
+import warnings
 
 import pandas as pd
 import pytest
+from pandas.errors import PerformanceWarning
 
 from xai_reweighting.run_ablation import (
     VALID_VARIANTS,
@@ -116,6 +118,23 @@ def test_controlled_deltas_use_a0_and_real_utility_references():
         "real_data_utility_baseline",
     }
     assert "A5-A2" not in set(deltas["comparison"])
+
+
+def test_controlled_deltas_do_not_fragment_wide_summary():
+    metrics = {
+        variant: {f"metric_{index}": float(index + offset) for index in range(150)}
+        for variant, offset in (("A0", 0), ("A1", 1))
+    }
+    summary_input = pd.DataFrame(
+        [{"variant": variant, **values} for variant, values in metrics.items()]
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", PerformanceWarning)
+        summary, _ = _build_controlled_deltas(summary_input, metrics, pd.DataFrame(), [])
+
+    assert not any(issubclass(item.category, PerformanceWarning) for item in caught)
+    assert summary.set_index("variant").loc["A1", "delta_metric_149_vs_A0"] == 1.0
 
 
 def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):

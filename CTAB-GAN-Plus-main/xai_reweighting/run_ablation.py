@@ -73,6 +73,9 @@ def _build_controlled_deltas(
     """Attach stable A0/real-reference deltas and retain sequential diagnostics."""
     summary = summary.copy()
     delta_rows: List[Dict[str, Any]] = []
+    updates_by_variant: Dict[str, Dict[str, Any]] = {
+        str(variant): {} for variant in summary["variant"]
+    }
 
     if "A0" in metrics_by_variant:
         a0 = metrics_by_variant["A0"]
@@ -85,10 +88,10 @@ def _build_controlled_deltas(
                 "reference_type": "synthetic_baseline",
                 **{f"delta_{key}": value for key, value in differences.items()},
             })
-            row_mask = summary["variant"] == variant
-            summary.loc[row_mask, "comparison_vs_A0"] = f"{variant}-A0"
+            updates = updates_by_variant.setdefault(variant, {})
+            updates["comparison_vs_A0"] = f"{variant}-A0"
             for key, value in differences.items():
-                summary.loc[row_mask, f"delta_{key}_vs_A0"] = value
+                updates[f"delta_{key}_vs_A0"] = value
 
     if not real_only_utility.empty:
         excluded = {
@@ -102,8 +105,8 @@ def _build_controlled_deltas(
                 "control": "REAL",
                 "reference_type": "real_data_utility_baseline",
             }
-            row_mask = summary["variant"] == variant
-            summary.loc[row_mask, "comparison_vs_real"] = f"{variant}-REAL"
+            updates = updates_by_variant.setdefault(variant, {})
+            updates["comparison_vs_real"] = f"{variant}-REAL"
             for task in utility_tasks:
                 task_name = str(task["name"])
                 task_rows = real_only_utility[
@@ -121,8 +124,8 @@ def _build_controlled_deltas(
                         continue
                     delta = float(current_value) - float(reference_value)
                     real_row[f"delta_{result_key}"] = delta
-                    summary.loc[row_mask, f"real_baseline_{result_key}"] = float(reference_value)
-                    summary.loc[row_mask, f"delta_{result_key}_vs_real"] = delta
+                    updates[f"real_baseline_{result_key}"] = float(reference_value)
+                    updates[f"delta_{result_key}_vs_real"] = delta
             delta_rows.append(real_row)
 
     # These contrasts remain useful for mechanism diagnosis but are secondary.
@@ -132,10 +135,21 @@ def _build_controlled_deltas(
         differences = _numeric_metric_delta(
             metrics_by_variant[variant], metrics_by_variant[previous]
         )
-        row_mask = summary["variant"] == variant
-        summary.loc[row_mask, "sequential_comparison"] = f"{variant}-{previous}"
+        updates = updates_by_variant.setdefault(variant, {})
+        updates["sequential_comparison"] = f"{variant}-{previous}"
         for key, value in differences.items():
-            summary.loc[row_mask, f"diagnostic_delta_{key}_vs_previous"] = value
+            updates[f"diagnostic_delta_{key}_vs_previous"] = value
+
+    # Add the many derived columns in one operation. Repeated ``.loc`` writes
+    # insert one pandas block per column and cause severe frame fragmentation.
+    updates = pd.DataFrame(
+        [updates_by_variant.get(str(variant), {}) for variant in summary["variant"]],
+        index=summary.index,
+    )
+    if not updates.empty:
+        summary = pd.concat(
+            [summary.drop(columns=updates.columns, errors="ignore"), updates], axis=1
+        )
 
     return summary, pd.DataFrame(delta_rows)
 
