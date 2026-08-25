@@ -26,6 +26,13 @@ def test_orchestrator_notebook_is_valid_and_code_cells_compile():
     assert 'facet_kws={"sharey": False}' not in source
     assert 'axis.set_xlabel("Variant")' in source
     assert 'axis.set_ylabel("Discrepancy delta vs A0")' in source
+    assert 'source_order = ["Real audit", "A0 synthetic", "A5 synthetic"]' in source
+    assert 'a0_path = run_directory / "synthetic_A0.csv"' in source
+    assert 'a5_path = run_directory / "synthetic_A5.csv"' in source
+    assert source.count("hue_order=source_order") == 3
+    assert source.count("palette=source_palette") == 3
+    assert "A0 corrected synthetic" not in source
+    assert "A0 raw synthetic audit" not in source
 
 
 def test_rq1_notebook_is_valid_and_safe_by_default():
