@@ -55,6 +55,13 @@ def test_mimic_age_is_general_and_integer():
     assert "age_at_intime" in config["generator"]["integer_columns"]
     assert config["generator"]["mixed_columns"]["spo2_max"] == [100.0]
     assert set(config["generator"]["log_columns"]) == {"wbc_min", "wbc_max"}
+    assert config["generator"]["snapshot_frq"] == 25
+    assert config["discriminator_shap"] == {
+        "enabled": True,
+        "background_size": 50,
+        "explain_size": 100,
+        "exclude_target": True,
+    }
 
 
 def test_wids_large_dataset_settings():

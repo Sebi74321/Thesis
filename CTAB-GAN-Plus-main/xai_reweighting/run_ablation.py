@@ -421,6 +421,52 @@ def _save_postprocessing_diagnostics(model, output_dir: Path, variant: str) -> N
         )
 
 
+def _save_discriminator_shap_artifacts(
+    model,
+    output_dir: Path,
+    variant: str,
+    config: Dict[str, Any],
+    generator_name: str,
+    seed: int,
+) -> Dict[str, Any] | None:
+    """Evaluate CTAB+'s internal discriminator snapshots when configured."""
+    shap_config = config.get("discriminator_shap", {})
+    if not shap_config.get("enabled", False) or generator_name != "ctabgan_plus":
+        return None
+
+    from .discriminator_shap import evaluate_discriminator_snapshots
+
+    excluded = list(shap_config.get("exclude_features", []))
+    if shap_config.get("exclude_target", True):
+        excluded.append(str(config["target_col"]))
+    excluded = list(dict.fromkeys(excluded))
+    trajectory = evaluate_discriminator_snapshots(
+        model,
+        background_size=int(shap_config.get("background_size", 50)),
+        explain_size=int(shap_config.get("explain_size", 100)),
+        seed=int(shap_config.get("seed", seed)),
+        exclude_features=excluded,
+    )
+    csv_name = f"discriminator_shap_{variant}.csv"
+    atomic_write_csv(output_dir / csv_name, trajectory)
+    metadata = {
+        "variant": variant,
+        "backend": generator_name,
+        "method": "shap.GradientExplainer",
+        "model": "ctabgan_plus_internal_discriminator",
+        "epochs": sorted(int(epoch) for epoch in trajectory["epoch"].unique()),
+        "background_rows": int(trajectory["background_rows"].iloc[0]),
+        "explained_rows": int(trajectory["explained_rows"].iloc[0]),
+        "seed": int(shap_config.get("seed", seed)),
+        "excluded_features": excluded,
+        "conditional_vector": "all_zero",
+        "aggregation": "sum_of_mean_absolute_encoded_shap_by_original_feature",
+        "artifact": csv_name,
+    }
+    atomic_write_json(output_dir / f"discriminator_shap_{variant}.json", metadata)
+    return metadata
+
+
 def run_experiment(
     config: Dict[str, Any],
     project_root: Path,
@@ -453,9 +499,34 @@ def run_experiment(
     config["smoke"] = bool(smoke)
     seed = int(config.get("seed", 42))
     generator_name = str(config.get("generator_name", "ctabgan_plus")).lower()
+    if (
+        generator_name == "ctabgan_plus"
+        and config.get("discriminator_shap", {}).get("enabled", False)
+    ):
+        snapshot_frequency = config["generator"].get("snapshot_frq")
+        epochs = int(config["generator"]["epochs"])
+        if (
+            isinstance(snapshot_frequency, bool)
+            or not isinstance(snapshot_frequency, int)
+            or snapshot_frequency <= 0
+            or snapshot_frequency > epochs
+        ):
+            raise ValueError(
+                "Enabled discriminator_shap requires generator.snapshot_frq to be "
+                "a positive integer no greater than generator.epochs"
+            )
     if smoke:
         config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
         config["generator"]["batch_size"] = int(config.get("smoke_batch_size", 64))
+        if (
+            str(config.get("generator_name", "ctabgan_plus")).lower() == "ctabgan_plus"
+            and config.get("discriminator_shap", {}).get("enabled", False)
+        ):
+            configured_frequency = config["generator"].get("snapshot_frq")
+            config["generator"]["snapshot_frq"] = min(
+                int(configured_frequency or config["generator"]["epochs"]),
+                int(config["generator"]["epochs"]),
+            )
         config.setdefault("detector", {})["n_estimators"] = 20
         config["detector"]["shap_max_rows"] = 100
         config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
@@ -553,6 +624,15 @@ def run_experiment(
     baseline_model = None
     training_diagnostics_by_variant: Dict[str, Dict[str, Any]] = {}
     if resume and baseline_audit_path.exists() and baseline_eval_path.exists():
+        if (
+            generator_name == "ctabgan_plus"
+            and config.get("discriminator_shap", {}).get("enabled", False)
+            and not (output_dir / "discriminator_shap_A0.csv").is_file()
+        ):
+            raise ValueError(
+                "Cannot resume A0 discriminator SHAP because the in-memory snapshots "
+                "were not persisted; start a new run to produce this artifact"
+            )
         baseline_audit = pd.read_csv(baseline_audit_path)
         baseline_eval = pd.read_csv(baseline_eval_path)
         training_path = output_dir / "training_diagnostics_A0.json"
@@ -586,6 +666,9 @@ def run_experiment(
         _save_postprocessing_diagnostics(baseline_model, output_dir, "A0")
         atomic_write_csv(baseline_audit_path, baseline_audit)
         atomic_write_csv(baseline_eval_path, baseline_eval)
+        _save_discriminator_shap_artifacts(
+            baseline_model, output_dir, "A0", config, generator_name, seed
+        )
 
     detector_cfg = config.get("detector", {})
     audit_result = train_detector(
@@ -811,6 +894,15 @@ def run_experiment(
         complete_marker = output_dir / f".{variant}.complete"
         metrics_path = output_dir / f"metrics_{variant}.json"
         if resume and complete_marker.exists() and metrics_path.exists():
+            if (
+                generator_name == "ctabgan_plus"
+                and config.get("discriminator_shap", {}).get("enabled", False)
+                and not (output_dir / f"discriminator_shap_{variant}.csv").is_file()
+            ):
+                raise ValueError(
+                    f"Cannot resume {variant} discriminator SHAP because the in-memory "
+                    "snapshots were not persisted; start a new run to produce this artifact"
+                )
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             metrics_by_variant[variant] = metrics
             rows.append({"variant": variant, **metrics})
@@ -847,6 +939,9 @@ def run_experiment(
                 atomic_write_csv(output_dir / f"synthetic_raw_{variant}.csv", raw_synthetic)
             _save_postprocessing_diagnostics(model, output_dir, variant)
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
+            _save_discriminator_shap_artifacts(
+                model, output_dir, variant, config, generator_name, seed
+            )
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 
         metrics, details = evaluate_variant(
@@ -949,6 +1044,11 @@ def run_experiment(
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "elapsed_seconds": time.time() - started,
             "variants_completed": variants,
+            "discriminator_shap_variants": [
+                variant
+                for variant in variants
+                if (output_dir / f"discriminator_shap_{variant}.csv").is_file()
+            ],
         }
     )
     atomic_write_json(manifest_path, manifest)

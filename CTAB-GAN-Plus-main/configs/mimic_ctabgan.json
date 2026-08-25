@@ -63,6 +63,12 @@
     "n_estimators": 300,
     "shap_max_rows": 2000
   },
+  "discriminator_shap": {
+    "enabled": true,
+    "background_size": 50,
+    "explain_size": 100,
+    "exclude_target": true
+  },
   "baseline_diagnostics": {
     "enabled": true,
     "top_n": 10,
@@ -164,7 +170,7 @@
     "mixture_max_iter": 500,
     "mixture_n_init": 3,
     "mixture_tol": 0.001,
-    "snapshot_frq": null
+    "snapshot_frq": 25
   },
   "smoke_rows": 500,
   "smoke_epochs": 1,
