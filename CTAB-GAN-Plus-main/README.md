@@ -57,6 +57,14 @@ IQR-scaled Wasserstein distance for continuous features and Jensen-Shannon
 distance for categorical features, with absolute and relative changes versus
 A0. Negative deltas indicate improved feature-level fidelity.
 
+The SHAP component used by A3/A4/A5 is calculated exclusively from
+misclassified rows in the A0 detector's held-out audit partition. Correctly
+classified detector rows still contribute to AUC, average precision, and
+accuracy, but never to feature priorities. The eligible error count, explained
+row count, and both error directions are recorded in
+`baseline_detector_metrics.json`. If the holdout has no errors, the SHAP signal
+is explicitly zero rather than falling back to correctly classified rows.
+
 ### Controlled ablation deltas
 
 The primary ablation reference is always A0. `ablation_deltas.csv` therefore

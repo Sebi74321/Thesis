@@ -1,6 +1,10 @@
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 
+import xai_reweighting.detector as detector_module
 from xai_reweighting.detector import _aggregate_encoded_shap, train_detector
 from xai_reweighting.evaluation import (
     evaluate_fidelity_and_tails,
@@ -62,6 +66,58 @@ def test_detector_accepts_equivalent_mixed_categorical_dtypes():
     )
 
     assert 0.0 <= result.metrics["detector_auc"] <= 1.0
+
+
+def test_detector_shap_uses_only_misclassified_holdout_rows(monkeypatch):
+    real = pd.DataFrame({"x": np.arange(100, 120, dtype=float)})
+    synthetic = pd.DataFrame({"x": np.arange(20, dtype=float)})
+    explained = []
+
+    class AlwaysSyntheticDetector:
+        def __init__(self, **kwargs):
+            pass
+
+        def fit(self, values, labels):
+            return self
+
+        def predict_proba(self, values):
+            return np.column_stack([np.ones(len(values)), np.zeros(len(values))])
+
+    class RecordingExplainer:
+        def __init__(self, model):
+            pass
+
+        def shap_values(self, values):
+            values = np.asarray(values)
+            explained.append(values.copy())
+            return [np.zeros_like(values), np.ones_like(values)]
+
+    monkeypatch.setattr(
+        detector_module, "RandomForestClassifier", AlwaysSyntheticDetector
+    )
+    monkeypatch.setitem(
+        sys.modules, "shap", SimpleNamespace(TreeExplainer=RecordingExplainer)
+    )
+
+    result = train_detector(
+        real,
+        synthetic,
+        categorical_cols=[],
+        seed=42,
+        n_estimators=5,
+        test_size=0.5,
+        shap_max_rows=3,
+        n_jobs=1,
+    )
+
+    assert result.metrics["detector_misclassified_rows"] == 10
+    assert result.metrics["detector_shap_candidate_rows"] == 10
+    assert result.metrics["detector_shap_rows"] == 3
+    assert result.metrics["detector_shap_scope"] == "misclassified_holdout_only"
+    assert result.metrics["detector_shap_status"] == "misclassified_holdout_rows_explained"
+    assert len(explained) == 1
+    assert len(explained[0]) == 3
+    assert (explained[0][:, 0] >= 100).all()
 
 
 def test_categorical_shap_is_grouped_before_taking_absolute_mean():

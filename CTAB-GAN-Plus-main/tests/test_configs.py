@@ -46,6 +46,7 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert weighting["correlation_threshold"] == 0.65
     assert "max_per_correlation_group" not in weighting
     assert config["feature_exclusion_sensitivity"]["enabled"] is True
+    assert config["detector"]["shap_scope"] == "misclassified_holdout_only"
 
 
 def test_mimic_age_is_general_and_integer():

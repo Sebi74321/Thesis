@@ -678,6 +678,9 @@ def run_experiment(
         seed=seed,
         n_estimators=int(detector_cfg.get("n_estimators", 300)),
         shap_max_rows=int(detector_cfg.get("shap_max_rows", 2000)),
+        shap_scope=str(
+            detector_cfg.get("shap_scope", "misclassified_holdout_only")
+        ),
         n_jobs=int(config.get("n_jobs", -1)),
     )
     components = compute_feature_components(

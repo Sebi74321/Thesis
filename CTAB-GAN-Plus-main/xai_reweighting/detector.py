@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
+from typing import Any, Dict, Iterable
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ def _one_hot_encoder():
 
 @dataclass(frozen=True)
 class DetectorResult:
-    metrics: Dict[str, float]
+    metrics: Dict[str, Any]
     shap_importance: pd.Series
 
 
@@ -77,9 +77,17 @@ def train_detector(
     n_estimators: int = 300,
     test_size: float = 0.3,
     shap_max_rows: int = 2000,
+    shap_scope: str = "misclassified_holdout_only",
     compute_shap: bool = True,
     n_jobs: int = -1,
 ) -> DetectorResult:
+    if shap_scope != "misclassified_holdout_only":
+        raise ValueError(
+            "Detector SHAP scope must be 'misclassified_holdout_only' so weighting "
+            "is based exclusively on detector errors"
+        )
+    if compute_shap and shap_max_rows < 1:
+        raise ValueError("shap_max_rows must be at least one when SHAP is enabled")
     common = [c for c in real_df.columns if c in synthetic_df.columns]
     if not common:
         raise ValueError("Real and synthetic data have no common columns")
@@ -121,12 +129,26 @@ def train_detector(
     detector.fit(X_train_p, y_train)
     probabilities = detector.predict_proba(X_test_p)[:, 1]
     predictions = (probabilities >= 0.5).astype(int)
+    truth = y_test.to_numpy(dtype=int)
+    misclassified = predictions != truth
+    false_real_as_synthetic = (truth == 1) & (predictions == 0)
+    false_synthetic_as_real = (truth == 0) & (predictions == 1)
+    misclassified_indices = np.flatnonzero(misclassified)
     metrics = {
         "detector_auc": float(roc_auc_score(y_test, probabilities)),
         "detector_average_precision": float(average_precision_score(y_test, probabilities)),
         "detector_accuracy": float(accuracy_score(y_test, predictions)),
         "n_real": int(n),
         "n_synthetic": int(n),
+        "detector_holdout_rows": int(len(y_test)),
+        "detector_misclassified_rows": int(misclassified.sum()),
+        "detector_misclassification_rate": float(misclassified.mean()),
+        "detector_false_real_as_synthetic": int(false_real_as_synthetic.sum()),
+        "detector_false_synthetic_as_real": int(false_synthetic_as_real.sum()),
+        "detector_shap_scope": shap_scope,
+        "detector_shap_candidate_rows": int(len(misclassified_indices)),
+        "detector_shap_rows": 0,
+        "detector_shap_status": "disabled" if not compute_shap else "pending",
     }
 
     importance = pd.Series(0.0, index=common, dtype=float)
@@ -135,12 +157,19 @@ def train_detector(
             import shap
         except ImportError as exc:
             raise RuntimeError("SHAP is required for A3/A4/A5; install the base requirements") from exc
-        if len(X_test_p) > shap_max_rows:
+        if len(misclassified_indices) == 0:
+            metrics["detector_shap_status"] = "no_misclassified_holdout_rows"
+            return DetectorResult(metrics, importance)
+        if len(misclassified_indices) > shap_max_rows:
             rng = np.random.default_rng(seed)
-            selected = rng.choice(len(X_test_p), shap_max_rows, replace=False)
-            X_shap = X_test_p[selected]
+            selected = np.sort(
+                rng.choice(misclassified_indices, shap_max_rows, replace=False)
+            )
         else:
-            X_shap = X_test_p
+            selected = misclassified_indices
+        X_shap = X_test_p[selected]
+        metrics["detector_shap_rows"] = int(len(selected))
+        metrics["detector_shap_status"] = "misclassified_holdout_rows_explained"
         values = shap.TreeExplainer(detector).shap_values(X_shap)
         if isinstance(values, list):
             values = values[1]

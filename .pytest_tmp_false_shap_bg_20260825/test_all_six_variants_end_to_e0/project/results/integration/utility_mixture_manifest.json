@@ -1,0 +1,42 @@
+{
+  "additive_fractions": [
+    0.0,
+    1.0
+  ],
+  "evaluation_split": "val",
+  "fraction_semantics": {
+    "additive": "synthetic rows divided by len(real_train)",
+    "replacement": "synthetic rows divided by fixed total training rows"
+  },
+  "generator_name": "ctabgan_plus",
+  "n_estimators": 5,
+  "repeats": 1,
+  "replacement_fractions": [
+    0.0,
+    1.0
+  ],
+  "utility_protocol": {
+    "decision_rule": "random_forest_argmax",
+    "evaluation_prevalence": "unchanged real validation/test prevalence",
+    "raw_prevalence_diagnostics": true,
+    "threshold_tuning": false,
+    "training_prevalence": "real_train for mortality; 0.5 for mortality_balanced"
+  },
+  "utility_tasks": [
+    {
+      "balance": "imbalanced",
+      "name": "mortality",
+      "positive_label": "1",
+      "target_col": "target",
+      "task_type": "classification"
+    }
+  ],
+  "variants": [
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5"
+  ]
+}

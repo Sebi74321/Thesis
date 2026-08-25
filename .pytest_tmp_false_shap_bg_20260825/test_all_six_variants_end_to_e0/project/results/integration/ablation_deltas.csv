@@ -1,0 +1,13 @@
+comparison,variant,control,reference_type,delta_score,delta_training_rows,delta_synthetic_rows
+A0-A0,A0,A0,synthetic_baseline,0.0,0.0,0.0
+A1-A0,A1,A0,synthetic_baseline,0.0,15.0,0.0
+A2-A0,A2,A0,synthetic_baseline,0.0,15.0,0.0
+A3-A0,A3,A0,synthetic_baseline,0.0,15.0,0.0
+A4-A0,A4,A0,synthetic_baseline,0.0,15.0,0.0
+A5-A0,A5,A0,synthetic_baseline,0.0,15.0,0.0
+A0-REAL,A0,REAL,real_data_utility_baseline,,,
+A1-REAL,A1,REAL,real_data_utility_baseline,,,
+A2-REAL,A2,REAL,real_data_utility_baseline,,,
+A3-REAL,A3,REAL,real_data_utility_baseline,,,
+A4-REAL,A4,REAL,real_data_utility_baseline,,,
+A5-REAL,A5,REAL,real_data_utility_baseline,,,

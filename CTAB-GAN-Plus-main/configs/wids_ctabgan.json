@@ -78,7 +78,8 @@
   },
   "detector": {
     "n_estimators": 300,
-    "shap_max_rows": 2000
+    "shap_max_rows": 2000,
+    "shap_scope": "misclassified_holdout_only"
   },
   "baseline_diagnostics": {
     "enabled": true,

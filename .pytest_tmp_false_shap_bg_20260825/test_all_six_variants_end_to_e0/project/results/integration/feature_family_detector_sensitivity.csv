@@ -1,0 +1,6 @@
+exclusion,excluded_features,excluded_feature_count,detector_auc,detector_auc_drop_vs_none,status
+none,,0,0.6944444444444445,0.0,ok
+family:category,category,1,0.5694444444444444,0.1250000000000001,ok
+family:continuous,continuous,1,0.8333333333333334,-0.13888888888888884,ok
+family:target,target,1,0.638888888888889,0.05555555555555558,ok
+all_selected,category|continuous|target,3,,,no_features_remaining

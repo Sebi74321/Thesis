@@ -1,0 +1,12 @@
+.........................                                                [100%]
+============================== warnings summary ===============================
+tests/test_runner_integration.py::test_dp_weighted_fit_saves_checkpoint_and_variant_privacy
+  C:\Users\sebas\Documents\Thesis\.deps\rq1-test\dp_cgans\utils.py:4: DeprecationWarning: module 'sre_parse' is deprecated
+    import sre_parse
+
+..\.deps\rq1-test\_pytest\cacheprovider.py:469
+  C:\Users\sebas\Documents\Thesis\.deps\rq1-test\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\Users\sebas\Documents\Thesis\CTAB-GAN-Plus-main\.pytest_cache\v\cache\nodeids: [WinError 5] Zugriff verweigert: 'C:\\Users\\sebas\\Documents\\Thesis\\CTAB-GAN-Plus-main\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+25 passed, 2 warnings in 125.06s (0:02:05)
