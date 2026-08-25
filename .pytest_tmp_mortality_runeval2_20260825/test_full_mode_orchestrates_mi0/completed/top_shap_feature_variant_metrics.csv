@@ -1,0 +1,3 @@
+variant,feature,kind,shap_rank,shap_raw,discrepancy_metric,distribution_discrepancy,a0_distribution_discrepancy,delta_discrepancy_vs_A0,relative_change_vs_A0,improved_vs_A0
+A0,value,unknown,1,1.0,unavailable,,,,,False
+A5,value,unknown,1,1.0,unavailable,,,,,False

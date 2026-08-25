@@ -8,18 +8,23 @@ If you have any question, please contact `z.zhao-8@tudelft.nl` for more informat
 
 ## Thesis evaluation utility task
 
-The thesis runners evaluate two downstream classification tasks. Mortality is
-the imbalanced task and remains the GAN conditioning target. `gender` is the
-balanced companion task for both MIMIC and WiDS (approximately 53/47 and 54/46
-respectively). Results use separate `utility_mortality_*` and
-`utility_gender_*` metric namespaces.
+The thesis runners evaluate mortality under two controlled training regimes.
+`mortality` preserves the real-training death prevalence, while
+`mortality_balanced` uses 50/50 death/survival training rows. The real
+validation or test split is never rebalanced, so both tasks are evaluated on
+the same clinically realistic patients. Results use separate
+`utility_mortality_*` and `utility_mortality_balanced_*` metric namespaces.
 
 Utility evaluation is deliberately data agnostic: a class-balanced Random
 Forest uses its fixed argmax prediction rule. No threshold is selected on the
 audit, validation, or test split. Headline classification metrics are macro F1,
 macro precision/recall, balanced accuracy, accuracy, ROC-AUC, and PR-AUC. The
-configured positive label `F` is fixed before evaluation and is used only for
-ROC/PR and class-specific supplementary metrics.
+configured positive label `1` is fixed before evaluation and is used only for
+ROC/PR and class-specific supplementary metrics. Additive and replacement
+mixture curves enforce their target mortality prevalence at every fraction and
+record the achieved positive/negative counts in their CSV artifacts. The same
+artifacts also retain the raw real and synthetic mortality rates, the
+counterfactual unadjusted mixture rate, and the applied prevalence adjustment.
 
 ### Measurement-aware generation and priority sensitivity
 

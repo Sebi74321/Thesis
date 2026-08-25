@@ -136,11 +136,11 @@ def test_feature_family_sensitivity_reports_detector_and_both_utility_tasks(monk
         ["gender", "mortality"],
         [
             {"name": "mortality", "target_col": "mortality", "positive_label": "1", "balance": "imbalanced"},
-            {"name": "gender", "target_col": "gender", "positive_label": "F", "balance": "balanced"},
+            {"name": "mortality_balanced", "target_col": "mortality", "positive_label": "1", "balance": "balanced"},
         ],
         detector_fn=fake_detector,
     )
 
     assert set(detector["exclusion"]) == {"none", "family:spo2", "all_selected"}
-    assert set(utility["utility_task"]) == {"mortality", "gender"}
+    assert set(utility["utility_task"]) == {"mortality", "mortality_balanced"}
     assert "delta_f1_macro_vs_none" in utility

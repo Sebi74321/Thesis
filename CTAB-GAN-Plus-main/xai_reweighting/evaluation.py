@@ -26,6 +26,7 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder, RobustScaler
 
 from .detector import train_detector
 from .scoring import MISSING
+from .utility_balance import normalize_balance_mode, resample_binary_fraction
 
 
 def _encoder():
@@ -168,10 +169,20 @@ def evaluate_utility(
     positive_label: str,
     metric_prefix: str = "utility_",
     exclude_predictors: Iterable[str] = (),
+    training_balance: str = "imbalanced",
     seed: int = 42,
     n_estimators: int = 300,
     n_jobs: int = -1,
 ) -> Dict[str, float]:
+    if normalize_balance_mode(training_balance) == "balanced":
+        synthetic = resample_binary_fraction(
+            synthetic,
+            len(synthetic),
+            target_col,
+            positive_label,
+            0.5,
+            seed + 17,
+        )
     excluded = set(exclude_predictors)
     predictors = [c for c in real_eval.columns if c != target_col and c not in excluded]
     if not predictors:
@@ -324,6 +335,7 @@ def evaluate_variant(
                 categorical_cols,
                 str(task["positive_label"]),
                 metric_prefix=f"utility_{name}_",
+                training_balance=str(task.get("balance", "imbalanced")),
                 seed=seed,
                 n_estimators=n_estimators,
                 n_jobs=n_jobs,

@@ -1,0 +1,5 @@
+comparison,variant,control,reference_type,delta_utility_mortality_roc_auc,delta_detector_auc,delta_training_rows,delta_synthetic_rows
+A0-A0,A0,A0,synthetic_baseline,0.0,0.0,0.0,0.0
+A5-A0,A5,A0,synthetic_baseline,0.0,0.0,3.0,0.0
+A0-REAL,A0,REAL,real_data_utility_baseline,-0.20000000000000007,,,
+A5-REAL,A5,REAL,real_data_utility_baseline,-0.20000000000000007,,,

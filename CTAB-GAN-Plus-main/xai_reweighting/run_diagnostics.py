@@ -16,6 +16,7 @@ from .priority_diagnostics import (
     top_shap_feature_variant_metrics,
 )
 from .scoring import correlation_groups
+from .utility_balance import replace_legacy_gender_task
 
 
 def run_existing_diagnostics(
@@ -107,10 +108,10 @@ def run_existing_diagnostics(
         groups = correlation_groups(
             real_audit, continuous, float(weighting.get("correlation_threshold", 0.65))
         )
-        utility_tasks = config.get("utility_tasks") or [
+        utility_tasks = replace_legacy_gender_task(config.get("utility_tasks") or [
             {"name": "mortality", "balance": "imbalanced", "target_col": config["target_col"], "positive_label": "1"},
-            {"name": "gender", "balance": "balanced", "target_col": "gender", "positive_label": "F"},
-        ]
+            {"name": "mortality_balanced", "balance": "balanced", "target_col": config["target_col"], "positive_label": "1"},
+        ], config["target_col"])
         sensitivity_config = config.get("feature_exclusion_sensitivity", {})
         detector_sensitivity, utility_sensitivity = feature_exclusion_sensitivity(
             real_audit, synthetic_audit, real_eval, synthetic_eval, priorities, groups,

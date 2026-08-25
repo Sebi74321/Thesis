@@ -14,6 +14,7 @@ from .mixed_utility import (
     evaluate_real_only_baseline,
     summarize_mixed_utility,
 )
+from .utility_balance import replace_legacy_gender_task
 
 
 def run_existing_mixed_utility(
@@ -57,16 +58,17 @@ def run_existing_mixed_utility(
     jobs = int(n_jobs if n_jobs is not None else config.get("n_jobs", -1))
     seed = int(config.get("seed", 42))
     generator_name = str(config.get("generator_name", "ctabgan_plus"))
-    utility_tasks = config.get("utility_tasks") or [
+    utility_tasks = replace_legacy_gender_task(config.get("utility_tasks") or [
         {"name": "mortality", "balance": "imbalanced", "target_col": config["target_col"], "positive_label": "1"},
-        {"name": "gender", "balance": "balanced", "target_col": "gender", "positive_label": "F"},
-    ]
+        {"name": "mortality_balanced", "balance": "balanced", "target_col": config["target_col"], "positive_label": "1"},
+    ], config["target_col"])
 
     baseline_frames = []
     for task in utility_tasks:
         baseline = evaluate_real_only_baseline(
             real_train, real_eval, task["target_col"], config["categorical_cols"],
             positive_label=str(task["positive_label"]), repeats=repeat_count,
+            balance=str(task.get("balance", "imbalanced")),
             seed=seed, n_estimators=tree_count, n_jobs=jobs, progress=progress,
         )
         baseline.insert(0, "utility_task", task["name"])
@@ -90,6 +92,7 @@ def run_existing_mixed_utility(
                 variant, real_train, synthetic, real_eval, task["target_col"],
                 config["categorical_cols"], baseline,
                 positive_label=str(task["positive_label"]),
+                balance=str(task.get("balance", "imbalanced")),
                 additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
                 replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
                 repeats=repeat_count, seed=seed, n_estimators=tree_count,
@@ -118,6 +121,9 @@ def run_existing_mixed_utility(
             "utility_protocol": {
                 "decision_rule": "random_forest_argmax",
                 "threshold_tuning": False,
+                "training_prevalence": "real_train for mortality; 0.5 for mortality_balanced",
+                "evaluation_prevalence": "unchanged real validation/test prevalence",
+                "raw_prevalence_diagnostics": True,
             },
             "variants": variants,
             "repeats": repeat_count,

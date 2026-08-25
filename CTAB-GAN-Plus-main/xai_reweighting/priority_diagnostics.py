@@ -429,6 +429,7 @@ def feature_exclusion_sensitivity(
                 metrics = evaluate_utility(
                     synthetic_eval, real_eval, str(task["target_col"]), categorical_cols,
                     str(task["positive_label"]), metric_prefix="", exclude_predictors=excluded,
+                    training_balance=str(task.get("balance", "imbalanced")),
                     seed=seed, n_estimators=n_estimators, n_jobs=n_jobs,
                 )
                 status = "ok"

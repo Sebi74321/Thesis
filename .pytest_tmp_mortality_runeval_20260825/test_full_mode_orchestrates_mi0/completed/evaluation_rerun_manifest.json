@@ -1,0 +1,34 @@
+{
+  "artifacts_recomputed": [
+    "metrics_<variant>.json",
+    "feature_metrics_<variant>.csv",
+    "ablation_summary.csv",
+    "ablation_deltas.csv",
+    "top_shap_feature_variant_metrics.csv",
+    "utility_real_only_baseline.csv",
+    "utility_mixture_<variant>.csv",
+    "utility_mixture_results.csv",
+    "utility_mixture_summary.csv",
+    "diagnostic CSV artifacts"
+  ],
+  "completed_at": "2026-08-25T15:10:50.015460+00:00",
+  "data_sha256": "f92fb2a1762af0e3c7f9a1967a20d38efaef48b65b0f0fd95fc71fc29048f6ea",
+  "diagnostics_requested": true,
+  "elapsed_seconds": 0.11011290550231934,
+  "evaluation_code_sha256": "e2068ed3dc8f4830cc5a6b01961cbfd5f100b4069a8ef513717cd74cfeb46140",
+  "mixed_utility_requested": true,
+  "seed": 42,
+  "stage": "val",
+  "started_at": "2026-08-25T15:10:49.905347+00:00",
+  "status": "complete",
+  "training_performed": false,
+  "variants": [
+    "A0",
+    "A5"
+  ],
+  "variants_requested": [
+    "A0",
+    "A5"
+  ],
+  "variants_skipped_missing": []
+}

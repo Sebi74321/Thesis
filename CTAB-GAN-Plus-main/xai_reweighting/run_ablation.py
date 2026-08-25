@@ -848,6 +848,7 @@ def run_experiment(
                 task["target_col"],
                 config["categorical_cols"],
                 positive_label=str(task["positive_label"]),
+                balance=str(task.get("balance", "imbalanced")),
                 repeats=baseline_repeats,
                 seed=seed,
                 n_estimators=baseline_estimators,
@@ -873,6 +874,7 @@ def run_experiment(
                 variant, splits.train, synthetic, real_eval, task["target_col"],
                 config["categorical_cols"], task_baseline,
                 positive_label=str(task["positive_label"]),
+                balance=str(task.get("balance", "imbalanced")),
                 additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
                 replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
                 repeats=int(mixed_cfg.get("repeats", 3)), seed=seed,
@@ -1018,6 +1020,9 @@ def run_experiment(
                 "utility_protocol": {
                     "decision_rule": "random_forest_argmax",
                     "threshold_tuning": False,
+                    "training_prevalence": "real_train for mortality; 0.5 for mortality_balanced",
+                    "evaluation_prevalence": "unchanged real validation/test prevalence",
+                    "raw_prevalence_diagnostics": True,
                 },
                 "variants": variants,
                 "additive_fractions": mixed_cfg.get(

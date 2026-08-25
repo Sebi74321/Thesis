@@ -98,8 +98,8 @@ def test_variant_reports_balanced_and_imbalanced_utility_separately():
         ["gender", "mortality"],
         ["x"],
         utility_tasks=[
-            {"name": "mortality", "target_col": "mortality", "positive_label": "1"},
-            {"name": "gender", "target_col": "gender", "positive_label": "F"},
+            {"name": "mortality", "balance": "imbalanced", "target_col": "mortality", "positive_label": "1"},
+            {"name": "mortality_balanced", "balance": "balanced", "target_col": "mortality", "positive_label": "1"},
         ],
         seed=42,
         n_jobs=1,
@@ -108,8 +108,8 @@ def test_variant_reports_balanced_and_imbalanced_utility_separately():
 
     assert "utility_mortality_roc_auc" in metrics
     assert "utility_mortality_positive_recall" in metrics
-    assert "utility_gender_roc_auc" in metrics
-    assert "utility_gender_f1_macro" in metrics
+    assert "utility_mortality_balanced_roc_auc" in metrics
+    assert "utility_mortality_balanced_f1_macro" in metrics
 
 
 def test_privacy_sampling_limits_only_nearest_neighbor_workload():

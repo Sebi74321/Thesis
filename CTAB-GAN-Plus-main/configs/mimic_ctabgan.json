@@ -89,16 +89,18 @@
     {
       "name": "mortality",
       "balance": "imbalanced",
+      "balance_strategy": "match_real_train",
       "task_type": "classification",
       "target_col": "hospital_expire_flag",
       "positive_label": "1"
     },
     {
-      "name": "gender",
+      "name": "mortality_balanced",
       "balance": "balanced",
+      "balance_strategy": "fixed_50_50",
       "task_type": "classification",
-      "target_col": "gender",
-      "positive_label": "F"
+      "target_col": "hospital_expire_flag",
+      "positive_label": "1"
     }
   ],
   "mixed_utility": {

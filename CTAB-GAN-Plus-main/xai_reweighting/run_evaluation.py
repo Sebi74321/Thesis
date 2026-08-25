@@ -18,6 +18,7 @@ from .priority_diagnostics import top_shap_feature_variant_metrics
 from .run_ablation import VALID_VARIANTS, _build_controlled_deltas
 from .run_diagnostics import run_existing_diagnostics
 from .run_mixed_utility import run_existing_mixed_utility
+from .utility_balance import replace_legacy_gender_task
 
 
 _PRESERVED_METRIC_FIELDS = {
@@ -98,6 +99,7 @@ def _real_only_utility(
             task["target_col"],
             config["categorical_cols"],
             positive_label=str(task["positive_label"]),
+            balance=str(task.get("balance", "imbalanced")),
             repeats=int(evaluation_cfg.get("real_baseline_repeats", 1)),
             seed=int(config.get("seed", 42)),
             n_estimators=int(evaluation_cfg.get("n_estimators", 300)),
@@ -170,14 +172,14 @@ def run_existing_evaluation(
         "continuous_cols",
         [column for column in data.columns if column not in config["categorical_cols"]],
     )
-    utility_tasks = config.get("utility_tasks") or [
+    utility_tasks = replace_legacy_gender_task(config.get("utility_tasks") or [
         {
             "name": "mortality",
             "balance": "imbalanced",
             "target_col": config["target_col"],
             "positive_label": "1",
         }
-    ]
+    ], config["target_col"])
 
     reevaluation_manifest_path = run_dir / "evaluation_rerun_manifest.json"
     code_files = list((project_root / "xai_reweighting").glob("*.py"))

@@ -33,6 +33,7 @@ def test_stratified_sample_is_exact_and_deterministic():
 def test_mixed_curves_preserve_sizes_and_include_real_baselines():
     real_train = _frame(0, 100)
     synthetic = real_train.sample(frac=1.0, random_state=7).reset_index(drop=True)
+    synthetic["target"] = (np.arange(len(synthetic)) % 2 == 0).astype(int)
     real_eval = _frame(150, 50)
     real_only = evaluate_real_only_baseline(
         real_train,
@@ -74,9 +75,56 @@ def test_mixed_curves_preserve_sizes_and_include_real_baselines():
     assert replacement.loc[0.5, "synthetic_training_rows"] == 50
     assert replacement.loc[1.0, "real_training_rows"] == 0
     assert replacement.loc[1.0, "synthetic_share_of_training"] == 1.0
+    assert np.allclose(result["target_positive_fraction"], 0.2)
+    assert np.allclose(result["training_positive_fraction"], 0.2)
+    assert np.allclose(result["source_synthetic_positive_fraction"], 0.5)
+    assert replacement.loc[1.0, "unadjusted_training_positive_fraction"] == 0.5
+    assert replacement.loc[1.0, "positive_fraction_adjustment"] == -0.3
     assert np.isfinite(result.select_dtypes(include=[np.number]).to_numpy()).all()
 
     summary = summarize_mixed_utility(result)
     assert len(summary) == 6
     assert {"pr_auc_mean", "balanced_accuracy_mean", "f1_macro_mean"}.issubset(summary)
     assert not any(column.startswith("tuned_") for column in result)
+
+
+def test_balanced_mortality_stays_half_positive_at_every_mixture_point():
+    real_train = _frame(0, 100)
+    synthetic = real_train.copy()
+    synthetic["target"] = (np.arange(len(synthetic)) % 10 != 0).astype(int)
+    real_eval = _frame(150, 50)
+    real_only = evaluate_real_only_baseline(
+        real_train,
+        real_eval,
+        "target",
+        ["category", "target"],
+        positive_label="1",
+        balance="balanced",
+        repeats=1,
+        n_estimators=10,
+        n_jobs=1,
+    )
+
+    result = evaluate_mixed_utility_curve(
+        "A5",
+        real_train,
+        synthetic,
+        real_eval,
+        "target",
+        ["category", "target"],
+        real_only,
+        positive_label="1",
+        balance="balanced",
+        additive_fractions=[0.0, 0.5, 1.0],
+        replacement_fractions=[0.0, 0.5, 1.0],
+        repeats=1,
+        n_estimators=10,
+        n_jobs=1,
+    )
+
+    assert np.allclose(result["target_positive_fraction"], 0.5)
+    assert np.allclose(result["training_positive_fraction"], 0.5)
+    assert np.allclose(result["source_synthetic_positive_fraction"], 0.9)
+    assert (
+        result["training_positive_rows"] + result["training_negative_rows"]
+    ).equals(result["training_rows"])

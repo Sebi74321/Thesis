@@ -341,6 +341,7 @@ def run_model_comparison(
                 task_frame = evaluate_real_only_baseline(
                     splits.train, real_eval, task["target_col"], config["categorical_cols"],
                     positive_label=str(task["positive_label"]),
+                    balance=str(task.get("balance", "imbalanced")),
                     repeats=int(mixed_cfg.get("repeats", 3)), seed=split_seed,
                     n_estimators=int(mixed_cfg.get("n_estimators", 300)),
                     n_jobs=int(config.get("n_jobs", -1)), progress=progress,
@@ -475,6 +476,7 @@ def run_model_comparison(
                             model_name, splits.train, synthetic, real_eval,
                             task["target_col"], config["categorical_cols"], baseline,
                             positive_label=str(task["positive_label"]),
+                            balance=str(task.get("balance", "imbalanced")),
                             additive_fractions=mixed_cfg.get("additive_fractions", [0.0, 0.25, 0.5, 1.0]),
                             replacement_fractions=mixed_cfg.get("replacement_fractions", [0.0, 0.25, 0.5, 0.75, 1.0]),
                             repeats=int(mixed_cfg.get("repeats", 3)), seed=seed,

@@ -1,0 +1,8 @@
+..............                                                           [100%]
+============================== warnings summary ===============================
+..\.deps\rq1-test\_pytest\cacheprovider.py:469
+  C:\Users\sebas\Documents\Thesis\.deps\rq1-test\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path C:\Users\sebas\Documents\Thesis\CTAB-GAN-Plus-main\.pytest_cache\v\cache\nodeids: [WinError 5] Zugriff verweigert: 'C:\\Users\\sebas\\Documents\\Thesis\\CTAB-GAN-Plus-main\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+14 passed, 1 warning in 10.43s

@@ -21,6 +21,13 @@ from sklearn.preprocessing import LabelEncoder
 from tqdm.auto import tqdm
 
 from .evaluation import _cat, _predictor_preprocessor
+from .utility_balance import (
+    class_balance_metadata,
+    compose_fixed_prevalence_mixture,
+    resample_binary_fraction,
+    source_prevalence_metadata,
+    target_positive_fraction,
+)
 
 
 class _ProgressReporter:
@@ -170,6 +177,7 @@ def evaluate_real_only_baseline(
     categorical_cols: Iterable[str],
     *,
     positive_label: str,
+    balance: str = "imbalanced",
     repeats: int = 3,
     seed: int = 42,
     n_estimators: int = 300,
@@ -179,12 +187,23 @@ def evaluate_real_only_baseline(
     if repeats < 1:
         raise ValueError("mixed utility repeats must be at least one")
     rows = []
+    target_fraction = target_positive_fraction(
+        real_train, target_col, positive_label, balance
+    )
     reporter = _ProgressReporter(repeats, "real-only utility", progress)
     try:
         for repeat in range(repeats):
             repeat_seed = seed + repeat * 1000
-            metrics = evaluate_training_utility(
+            training = resample_binary_fraction(
                 real_train,
+                len(real_train),
+                target_col,
+                positive_label,
+                target_fraction,
+                repeat_seed + 17,
+            )
+            metrics = evaluate_training_utility(
+                training,
                 real_eval,
                 target_col,
                 categorical_cols,
@@ -200,9 +219,16 @@ def evaluate_real_only_baseline(
                     "synthetic_share_of_training": 0.0,
                     "repeat": repeat,
                     "seed": repeat_seed,
-                    "real_training_rows": len(real_train),
+                    "real_training_rows": len(training),
                     "synthetic_training_rows": 0,
-                    "training_rows": len(real_train),
+                    "training_rows": len(training),
+                    **class_balance_metadata(
+                        training,
+                        real_train.iloc[0:0],
+                        target_col,
+                        positive_label,
+                        target_fraction,
+                    ),
                     **metrics,
                 }
             )
@@ -222,6 +248,7 @@ def evaluate_mixed_utility_curve(
     real_only: pd.DataFrame,
     *,
     positive_label: str,
+    balance: str = "imbalanced",
     additive_fractions: Sequence[float] = (0.0, 0.25, 0.5, 1.0),
     replacement_fractions: Sequence[float] = (0.0, 0.25, 0.5, 0.75, 1.0),
     repeats: int = 3,
@@ -237,6 +264,9 @@ def evaluate_mixed_utility_curve(
     for fraction in [*additive_fractions, *replacement_fractions]:
         if not 0.0 <= float(fraction) <= 1.0:
             raise ValueError("Mixed utility fractions must lie within [0, 1]")
+    target_fraction = target_positive_fraction(
+        real_train, target_col, positive_label, balance
+    )
 
     records = []
     fit_count = repeats * (
@@ -252,12 +282,22 @@ def evaluate_mixed_utility_curve(
             for point, fraction in enumerate(fractions):
                 if np.isclose(fraction, 0.0):
                     for baseline in real_only.to_dict(orient="records"):
+                        source_metadata = source_prevalence_metadata(
+                            real_train,
+                            synthetic,
+                            len(real_train),
+                            0,
+                            target_col,
+                            positive_label,
+                            float(baseline["training_positive_fraction"]),
+                        )
                         baseline.update(
                             {
                                 "variant": variant,
                                 "protocol": protocol,
                                 "synthetic_fraction": 0.0,
                                 "synthetic_share_of_training": 0.0,
+                                **source_metadata,
                             }
                         )
                         records.append(baseline)
@@ -268,16 +308,20 @@ def evaluate_mixed_utility_curve(
                         0 if protocol == "additive" else 503
                     )
                     if protocol == "additive":
-                        real_part = real_train.copy(deep=True)
+                        real_count = len(real_train)
                         synthetic_count = int(np.floor(fraction * len(real_train)))
                     else:
                         synthetic_count = int(round(fraction * len(real_train)))
                         real_count = len(real_train) - synthetic_count
-                        real_part = _stratified_sample(
-                            real_train, real_count, target_col, sample_seed
-                        )
-                    synthetic_part = _stratified_sample(
-                        synthetic, synthetic_count, target_col, sample_seed + 11
+                    real_part, synthetic_part = compose_fixed_prevalence_mixture(
+                        real_train,
+                        synthetic,
+                        real_count,
+                        synthetic_count,
+                        target_col,
+                        positive_label,
+                        target_fraction,
+                        sample_seed,
                     )
                     training = (
                         pd.concat([real_part, synthetic_part], ignore_index=True)
@@ -294,6 +338,22 @@ def evaluate_mixed_utility_curve(
                         n_estimators=n_estimators,
                         n_jobs=n_jobs,
                     )
+                    balance_metadata = class_balance_metadata(
+                        real_part,
+                        synthetic_part,
+                        target_col,
+                        positive_label,
+                        target_fraction,
+                    )
+                    source_metadata = source_prevalence_metadata(
+                        real_train,
+                        synthetic,
+                        len(real_part),
+                        len(synthetic_part),
+                        target_col,
+                        positive_label,
+                        float(balance_metadata["training_positive_fraction"]),
+                    )
                     records.append(
                         {
                             "variant": variant,
@@ -307,6 +367,8 @@ def evaluate_mixed_utility_curve(
                             "real_training_rows": len(real_part),
                             "synthetic_training_rows": len(synthetic_part),
                             "training_rows": len(training),
+                            **balance_metadata,
+                            **source_metadata,
                             **metrics,
                         }
                     )
