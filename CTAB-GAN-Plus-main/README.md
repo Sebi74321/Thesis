@@ -63,10 +63,8 @@ the same frozen validation or test split as the synthetic-data utility models.
 
 `ablation_summary.csv` exposes the same values as
 `delta_<metric>_vs_A0`, and utility-only `delta_<metric>_vs_real` columns along
-with the corresponding `real_baseline_<metric>` value. Sequential comparisons
-such as A3 versus A1 and A5 versus A4 remain available only as explicitly named
-`diagnostic_delta_<metric>_vs_previous` columns; they are not treated as the
-main controlled effect.
+with the corresponding `real_baseline_<metric>` value. No variant-to-variant
+contrasts other than each variant versus A0 are produced.
 
 ### Weighted retraining across GAN frameworks
 

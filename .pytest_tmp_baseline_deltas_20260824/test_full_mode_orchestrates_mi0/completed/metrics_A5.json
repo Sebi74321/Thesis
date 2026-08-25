@@ -1,0 +1,8 @@
+{
+  "detector_auc": 0.8,
+  "synthetic_rows": 6,
+  "training_rows": 9,
+  "utility_mortality_roc_auc": 0.7,
+  "variant": "A5",
+  "weight_mean": 1.7
+}

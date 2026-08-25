@@ -1,0 +1,23 @@
+{
+  "data_sha256": "f92fb2a1762af0e3c7f9a1967a20d38efaef48b65b0f0fd95fc71fc29048f6ea",
+  "diagnostics_requested": false,
+  "elapsed_seconds": 0.09166765213012695,
+  "error": "synthetic_A5.csv does not preserve the real training schema",
+  "error_type": "ValueError",
+  "evaluation_code_sha256": "d28dc116377609e187f1a3ad535f20dc4caa647bfe35d8a4d484acf2ff2f78dd",
+  "failed_at": "2026-08-24T13:18:35.218559+00:00",
+  "mixed_utility_requested": false,
+  "seed": 42,
+  "stage": "val",
+  "started_at": "2026-08-24T13:18:35.126892+00:00",
+  "status": "failed",
+  "training_performed": false,
+  "variants": [
+    "A0",
+    "A5"
+  ],
+  "variants_requested": [
+    "A5"
+  ],
+  "variants_skipped_missing": []
+}

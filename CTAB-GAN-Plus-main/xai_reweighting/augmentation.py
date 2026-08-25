@@ -23,13 +23,13 @@ def _sample_augmentation(real_train, gamma, seed, probabilities):
 
 
 def create_uniform_augmentation(
-    real_train: pd.DataFrame, gamma: float = 0.25, seed: int = 42
+    real_train: pd.DataFrame, gamma: float = 0.6, seed: int = 42
 ) -> Tuple[pd.DataFrame, Dict[int, int]]:
     return _sample_augmentation(real_train, gamma, seed, None)
 
 
 def create_weighted_augmentation(
-    real_train: pd.DataFrame, row_weights, gamma: float = 0.25, seed: int = 42
+    real_train: pd.DataFrame, row_weights, gamma: float = 0.6, seed: int = 42
 ) -> Tuple[pd.DataFrame, Dict[int, int]]:
     weights = np.asarray(row_weights, dtype=float)
     if len(weights) != len(real_train):

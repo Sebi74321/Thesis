@@ -261,8 +261,8 @@ def compute_row_weights(
     real_train: pd.DataFrame,
     feature_priority: pd.DataFrame,
     region_definitions: Mapping[str, RegionDefinition],
-    alpha: float = 1.0,
-    w_max: float = 2.0,
+    alpha: float = 4.0,
+    w_max: float = 3.0,
 ) -> tuple[pd.Series, pd.DataFrame]:
     if alpha < 0 or w_max < 1:
         raise ValueError("alpha must be non-negative and w_max must be at least 1")

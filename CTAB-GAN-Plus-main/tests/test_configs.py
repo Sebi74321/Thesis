@@ -36,9 +36,13 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert tasks["gender"]["positive_label"] == "F"
     assert tasks["gender"]["balance"] == "balanced"
     weighting = config["weighting"]
-    assert weighting["correlation_aware_selection"] is True
+    assert weighting["alpha"] == 4.0
+    assert weighting["gamma"] == 0.6
+    assert weighting["top_k"] == 5
+    assert weighting["w_max"] == 3.0
+    assert weighting["correlation_aware_selection"] is False
     assert weighting["correlation_threshold"] == 0.65
-    assert weighting["max_per_correlation_group"] == 1
+    assert "max_per_correlation_group" not in weighting
     assert config["feature_exclusion_sensitivity"]["enabled"] is True
 
 
@@ -103,3 +107,13 @@ def test_weighted_multigan_configs_inherit_dataset_protocol(
     if generator_name == "dp_cgan":
         assert config["generator"]["private"] is True
         assert config["generator"]["discriminator_steps"] == 10
+
+
+def test_all_weighted_configs_use_the_same_reweighting_protocol():
+    names = [
+        "mimic_ctabgan.json", "mimic_ctgan.json", "mimic_dpcgan.json",
+        "wids_ctabgan.json", "wids_ctgan.json", "wids_dpcgan.json",
+    ]
+    protocols = [load_ablation_config(PROJECT_ROOT / "configs" / name)["weighting"] for name in names]
+
+    assert all(protocol == protocols[0] for protocol in protocols[1:])

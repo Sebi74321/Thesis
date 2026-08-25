@@ -1,0 +1,5 @@
+outcome,feature,conditional_rank,shap_raw,real_rows,synthetic_rows,kind,real_missing_rate,synthetic_missing_rate,real_mean,synthetic_mean,real_median,synthetic_median,real_q05,synthetic_q05,real_q95,synthetic_q95,wasserstein_scaled,ks,jensen_shannon,max_category_frequency_error
+0,continuous,1,1.0,16,17,continuous,0.0,0.0,46.5,36.23529411764706,45.5,35.0,10.75,8.0,75.75,64.6,0.24009287925696593,0.375,,
+0,category,2,0.5,16,17,categorical,,,,,,,,,,,,,0.132025070180941,0.15441176470588236
+1,continuous,1,1.0,4,3,continuous,0.0,0.0,87.0,87.33333333333333,87.0,85.0,80.9,84.1,93.1,92.2,0.5,0.41666666666666663,,
+1,category,2,0.5,4,3,categorical,,,,,,,,,,,,,0.677604543245723,0.6666666666666667

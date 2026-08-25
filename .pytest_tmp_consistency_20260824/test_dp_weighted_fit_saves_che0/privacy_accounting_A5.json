@@ -1,0 +1,22 @@
+{
+  "actual_discriminator_updates": 40,
+  "batch_size": 10,
+  "delta": 2e-06,
+  "discriminator_steps": 10,
+  "epochs": 2,
+  "epsilon_recomputed_actual_updates": 26.024244492343335,
+  "epsilon_recomputed_actual_updates_optimal_order": 2.1,
+  "epsilon_recomputed_upstream_steps": 5.866821448476445,
+  "epsilon_recomputed_upstream_steps_optimal_order": 4.4,
+  "limitation": "The upstream mechanism uses parameter-gradient hooks and weight clipping, not conventional per-example DP-SGD clipping. Values are implementation-specific estimates.",
+  "noise_multiplier": 1.0,
+  "pipeline_privacy_scope": "Generator training only; A0 audit signals, weighting, evaluation, and released artifacts are not covered by an end-to-end DP guarantee.",
+  "privacy_claim_status": "upstream_privacy_estimate_unverified",
+  "private": true,
+  "sampling_probability": 0.5,
+  "steps_per_epoch": 2,
+  "train_rows": 20,
+  "upstream_accountant_steps": 2,
+  "upstream_reported_epsilon": null,
+  "variant": "A5"
+}

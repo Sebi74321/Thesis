@@ -1,0 +1,10 @@
+{
+  "checkpoint_saved": true,
+  "convergence_warning_count": 0,
+  "convergence_warnings": [],
+  "epochs_completed": 0,
+  "generator_name": "ctabgan_plus",
+  "mixture_all_converged": null,
+  "status": "unavailable",
+  "training_rows": 75
+}

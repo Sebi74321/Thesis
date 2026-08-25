@@ -107,17 +107,16 @@ def test_controlled_deltas_use_a0_and_real_utility_references():
     )
 
     a5 = summary.set_index("variant").loc["A5"]
-    a3 = summary.set_index("variant").loc["A3"]
     assert a5["delta_utility_mortality_roc_auc_vs_A0"] == pytest.approx(0.15)
-    assert a3["sequential_comparison"] == "A3-A1"
-    assert a3["diagnostic_delta_utility_mortality_roc_auc_vs_previous"] == pytest.approx(0.07)
     assert a5["real_baseline_utility_mortality_roc_auc"] == pytest.approx(0.81)
     assert a5["delta_utility_mortality_roc_auc_vs_real"] == pytest.approx(-0.06)
+    assert "sequential_comparison" not in summary.columns
+    assert not any(column.endswith("_vs_previous") for column in summary.columns)
     assert set(deltas["reference_type"]) == {
         "synthetic_baseline",
         "real_data_utility_baseline",
     }
-    assert "A5-A2" not in set(deltas["comparison"])
+    assert set(deltas["control"]) == {"A0", "REAL"}
 
 
 def test_controlled_deltas_do_not_fragment_wide_summary():

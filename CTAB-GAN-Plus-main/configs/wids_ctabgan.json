@@ -68,13 +68,12 @@
     "test_fraction": 0.1
   },
   "weighting": {
-    "alpha": 2.0,
-    "gamma": 0.25,
+    "alpha": 4.0,
+    "gamma": 0.6,
     "top_k": 5,
     "w_max": 3.0,
-    "correlation_aware_selection": true,
+    "correlation_aware_selection": false,
     "correlation_threshold": 0.65,
-    "max_per_correlation_group": 1,
     "exclude_features": []
   },
   "detector": {

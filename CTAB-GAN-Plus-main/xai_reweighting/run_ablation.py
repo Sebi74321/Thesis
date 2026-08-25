@@ -44,9 +44,6 @@ from .scoring import (
 
 VALID_VARIANTS = ("A0", "A1", "A2", "A3", "A4", "A5")
 VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
-# Mechanism controls: A2/A3 are each compared with uniform augmentation,
-# A4 adds SHAP to mismatch, and A5 adds the explicit tail signal.
-PREVIOUS = {"A1": "A0", "A2": "A1", "A3": "A1", "A4": "A2", "A5": "A4"}
 
 
 def _numeric_metric_delta(current: Dict[str, Any], reference: Dict[str, Any]) -> Dict[str, float]:
@@ -70,7 +67,7 @@ def _build_controlled_deltas(
     real_only_utility: pd.DataFrame,
     utility_tasks: List[Dict[str, Any]],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Attach stable A0/real-reference deltas and retain sequential diagnostics."""
+    """Attach deltas using only A0 and real-data references."""
     summary = summary.copy()
     delta_rows: List[Dict[str, Any]] = []
     updates_by_variant: Dict[str, Dict[str, Any]] = {
@@ -127,18 +124,6 @@ def _build_controlled_deltas(
                     updates[f"real_baseline_{result_key}"] = float(reference_value)
                     updates[f"delta_{result_key}_vs_real"] = delta
             delta_rows.append(real_row)
-
-    # These contrasts remain useful for mechanism diagnosis but are secondary.
-    for variant, previous in PREVIOUS.items():
-        if variant not in metrics_by_variant or previous not in metrics_by_variant:
-            continue
-        differences = _numeric_metric_delta(
-            metrics_by_variant[variant], metrics_by_variant[previous]
-        )
-        updates = updates_by_variant.setdefault(variant, {})
-        updates["sequential_comparison"] = f"{variant}-{previous}"
-        for key, value in differences.items():
-            updates[f"diagnostic_delta_{key}_vs_previous"] = value
 
     # Add the many derived columns in one operation. Repeated ``.loc`` writes
     # insert one pandas block per column and cause severe frame fragmentation.
@@ -661,7 +646,7 @@ def run_experiment(
         {feature: definition.to_dict() for feature, definition in definitions.items()},
     )
 
-    weighting = {"alpha": 2.0, "gamma": 0.5, "top_k": 5, "w_max": 3.0}
+    weighting = {"alpha": 4.0, "gamma": 0.6, "top_k": 5, "w_max": 3.0}
     weighting.update(config.get("weighting", {}))
     group_mapping = correlation_groups(
         splits.audit,
@@ -674,10 +659,10 @@ def run_experiment(
             components,
             variant,
             int(weighting["top_k"]),
-            feature_groups=group_mapping if weighting.get("correlation_aware_selection", True) else None,
+            feature_groups=group_mapping if weighting.get("correlation_aware_selection", False) else None,
             max_per_group=(
                 int(weighting.get("max_per_correlation_group", 1))
-                if weighting.get("correlation_aware_selection", True)
+                if weighting.get("correlation_aware_selection", False)
                 else None
             ),
             exclude_features=weighting.get("exclude_features", []),
