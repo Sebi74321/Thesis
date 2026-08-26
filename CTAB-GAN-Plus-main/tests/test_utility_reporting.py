@@ -3,10 +3,12 @@ import pandas as pd
 
 from xai_reweighting.utility_reporting import (
     FIDELITY_SCORE_SPECS,
+    PRIVACY_SCORE_SPECS,
     UTILITY_SCORE_LABELS,
     build_fidelity_heatmap_scores,
+    build_privacy_heatmap_scores,
     build_utility_heatmap_scores,
-    build_utility_fidelity_tradeoff_scores,
+    build_utility_fidelity_privacy_tradeoff_scores,
     save_ablation_heatmap_artifacts,
     save_utility_heatmap_artifacts,
 )
@@ -86,12 +88,24 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
                 **{f"utility_mortality_{metric}": 0.60 for metric in UTILITY_SCORE_LABELS},
                 "mean_wasserstein_scaled": 0.40,
                 "detector_auc": 0.90,
+                "privacy_exact_match_rate": 0.02,
+                "privacy_synthetic_nn_p5": 0.80,
+                "privacy_heldout_nn_p5": 1.00,
+                "privacy_median_distance_ratio": 0.85,
+                "privacy_synthetic_nn_p95": 1.20,
+                "privacy_heldout_nn_p95": 1.50,
             },
             {
                 "variant": "A1",
                 **{f"utility_mortality_{metric}": 0.65 for metric in UTILITY_SCORE_LABELS},
                 "mean_wasserstein_scaled": 0.30,
                 "detector_auc": 0.80,
+                "privacy_exact_match_rate": 0.01,
+                "privacy_synthetic_nn_p5": 0.90,
+                "privacy_heldout_nn_p5": 1.00,
+                "privacy_median_distance_ratio": 0.95,
+                "privacy_synthetic_nn_p95": 1.35,
+                "privacy_heldout_nn_p95": 1.50,
             },
         ]
     )
@@ -101,7 +115,7 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
     tasks = [{"name": "mortality", "balance": "imbalanced"}]
     utility = build_utility_heatmap_scores(summary, real_only, tasks)
 
-    tradeoff = build_utility_fidelity_tradeoff_scores(summary, utility, tasks)
+    tradeoff = build_utility_fidelity_privacy_tradeoff_scores(summary, utility, tasks)
     utility_a1 = tradeoff[
         (tradeoff["metric_key"] == "utility_mortality_positive_recall")
         & (tradeoff["variant"] == "A1")
@@ -114,6 +128,14 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
         (tradeoff["metric_key"] == "fidelity_detector_auc")
         & (tradeoff["variant"] == "A1")
     ].iloc[0]
+    exact_match_a1 = tradeoff[
+        (tradeoff["metric_key"] == "privacy_proxy_privacy_exact_match_rate")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
+    p5_ratio_a1 = tradeoff[
+        (tradeoff["metric_key"] == "privacy_proxy_privacy_nn_p5_distance_ratio")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
 
     assert np.isclose(utility_a1["improvement_delta"], -0.05)
     assert utility_a1["reference"] == "REAL"
@@ -121,10 +143,22 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
     assert np.isclose(detector_a1["improvement_delta"], 0.10)
     assert wasserstein_a1["reference"] == "A0"
     assert detector_a1["direction_rule"].startswith("a0_distance_to_ideal")
+    assert np.isclose(exact_match_a1["improvement_delta"], 0.01)
+    assert np.isclose(p5_ratio_a1["improvement_delta"], 0.10)
+    assert exact_match_a1["reference"] == "A0"
 
     fidelity = build_fidelity_heatmap_scores(summary)
     assert set(fidelity["metric"]) == {"mean_wasserstein_scaled", "detector_auc"}
     assert set(FIDELITY_SCORE_SPECS).issuperset(fidelity["metric"])
+    privacy = build_privacy_heatmap_scores(summary)
+    assert set(privacy["metric"]) == set(PRIVACY_SCORE_SPECS)
+    assert np.isclose(
+        privacy[
+            (privacy["metric"] == "privacy_nn_p95_distance_ratio")
+            & (privacy["variant"] == "A1")
+        ]["absolute_value"].iloc[0],
+        0.90,
+    )
 
     paths = save_ablation_heatmap_artifacts(summary, real_only, tasks, tmp_path)
     assert {path.name for path in paths} == {
@@ -132,7 +166,9 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
         "utility_heatmap.png",
         "fidelity_heatmap_scores.csv",
         "fidelity_heatmap.png",
-        "utility_fidelity_tradeoff_scores.csv",
-        "utility_fidelity_tradeoff_heatmap.png",
+        "privacy_proxy_heatmap_scores.csv",
+        "privacy_proxy_heatmap.png",
+        "utility_fidelity_privacy_tradeoff_scores.csv",
+        "utility_fidelity_privacy_tradeoff_heatmap.png",
     }
     assert all(path.is_file() and path.stat().st_size > 0 for path in paths)

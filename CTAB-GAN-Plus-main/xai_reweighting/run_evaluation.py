@@ -306,8 +306,10 @@ def run_existing_evaluation(
                     "utility_heatmap.png",
                     "fidelity_heatmap_scores.csv",
                     "fidelity_heatmap.png",
-                    "utility_fidelity_tradeoff_scores.csv",
-                    "utility_fidelity_tradeoff_heatmap.png",
+                    "privacy_proxy_heatmap_scores.csv",
+                    "privacy_proxy_heatmap.png",
+                    "utility_fidelity_privacy_tradeoff_scores.csv",
+                    "utility_fidelity_privacy_tradeoff_heatmap.png",
                     *(
                         ["top_shap_feature_variant_metrics.csv"]
                         if (run_dir / "top_shap_feature_variant_metrics.csv").is_file()

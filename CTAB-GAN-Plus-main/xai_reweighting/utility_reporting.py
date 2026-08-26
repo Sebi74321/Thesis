@@ -97,6 +97,37 @@ FIDELITY_SCORE_SPECS: dict[str, dict[str, Any]] = {
     },
 }
 
+PRIVACY_SCORE_SPECS: dict[str, dict[str, Any]] = {
+    "privacy_exact_match_rate": {
+        "label": "Exact-match rate",
+        "ideal": 0.0,
+        "direction": "lower",
+        "interpretation": "Lower means fewer synthetic rows exactly match real training rows.",
+    },
+    "privacy_nn_p5_distance_ratio": {
+        "label": "NN p5 distance ratio",
+        "ideal": 1.0,
+        "direction": "higher",
+        "numerator": "privacy_synthetic_nn_p5",
+        "denominator": "privacy_heldout_nn_p5",
+        "interpretation": "1.0 equals the held-out-real p5 distance from real training data.",
+    },
+    "privacy_median_distance_ratio": {
+        "label": "NN median distance ratio",
+        "ideal": 1.0,
+        "direction": "higher",
+        "interpretation": "1.0 equals the held-out-real median distance from training data.",
+    },
+    "privacy_nn_p95_distance_ratio": {
+        "label": "NN p95 distance ratio",
+        "ideal": 1.0,
+        "direction": "higher",
+        "numerator": "privacy_synthetic_nn_p95",
+        "denominator": "privacy_heldout_nn_p95",
+        "interpretation": "1.0 equals the held-out-real p95 distance from real training data.",
+    },
+}
+
 
 def _atomic_save_figure(figure, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -287,7 +318,59 @@ def build_fidelity_heatmap_scores(summary: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_utility_fidelity_tradeoff_scores(
+def build_privacy_heatmap_scores(summary: pd.DataFrame) -> pd.DataFrame:
+    """Return comparable privacy-proxy values and relative risk coloring."""
+    if "variant" not in summary:
+        raise ValueError("Ablation summary must contain a variant column")
+    variants = _variant_order(summary["variant"].astype(str))
+    indexed = summary.assign(variant=summary["variant"].astype(str)).set_index("variant")
+    rows: list[dict[str, Any]] = []
+    for metric, specification in PRIVACY_SCORE_SPECS.items():
+        numerator = specification.get("numerator")
+        denominator = specification.get("denominator")
+        if numerator and denominator:
+            if numerator not in indexed or denominator not in indexed:
+                continue
+            numerator_values = pd.to_numeric(indexed.loc[variants, numerator], errors="coerce")
+            denominator_values = pd.to_numeric(
+                indexed.loc[variants, denominator], errors="coerce"
+            ).replace(0.0, np.nan)
+            values = numerator_values / denominator_values
+        else:
+            if metric not in indexed:
+                continue
+            values = pd.to_numeric(indexed.loc[variants, metric], errors="coerce")
+
+        direction = str(specification["direction"])
+        # A lower risk score always means the more favorable privacy proxy.
+        risk = values if direction == "lower" else -values
+        finite = risk[np.isfinite(risk)]
+        if finite.empty:
+            normalized = pd.Series(np.nan, index=values.index)
+        elif np.isclose(float(finite.max()), float(finite.min())):
+            normalized = pd.Series(0.5, index=values.index)
+            normalized[values.isna()] = np.nan
+        else:
+            normalized = (risk - float(finite.min())) / (
+                float(finite.max()) - float(finite.min())
+            )
+        for variant in variants:
+            rows.append(
+                {
+                    "variant": variant,
+                    "metric": metric,
+                    "display_metric": str(specification["label"]),
+                    "direction": direction,
+                    "heldout_equivalence_value": float(specification["ideal"]),
+                    "interpretation": str(specification["interpretation"]),
+                    "absolute_value": values.loc[variant],
+                    "normalized_privacy_risk": normalized.loc[variant],
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def build_utility_fidelity_privacy_tradeoff_scores(
     summary: pd.DataFrame,
     utility_scores: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
@@ -370,6 +453,46 @@ def build_utility_fidelity_tradeoff_scores(
                 }
             )
 
+    privacy = build_privacy_heatmap_scores(summary)
+    if not privacy.empty:
+        privacy_indexed = privacy.set_index(["metric", "variant"])
+        for metric, specification in PRIVACY_SCORE_SPECS.items():
+            if metric not in set(privacy["metric"]):
+                continue
+            reference_value = pd.to_numeric(
+                privacy_indexed.loc[(metric, "A0"), "absolute_value"], errors="coerce"
+            )
+            if not np.isfinite(reference_value):
+                continue
+            direction = str(specification["direction"])
+            for variant in variants:
+                value = pd.to_numeric(
+                    privacy_indexed.loc[(metric, variant), "absolute_value"],
+                    errors="coerce",
+                )
+                if direction == "lower":
+                    improvement = reference_value - value
+                    rule = "a0_privacy_risk_minus_variant_privacy_risk"
+                else:
+                    improvement = value - reference_value
+                    rule = "variant_distance_ratio_minus_a0_distance_ratio"
+                rows.append(
+                    {
+                        "domain": "privacy_proxy",
+                        "utility_task": None,
+                        "metric": metric,
+                        "metric_key": f"privacy_proxy_{metric}",
+                        "display_metric": f"Privacy proxy | {specification['label']}",
+                        "variant": variant,
+                        "reference": "A0",
+                        "direction_rule": rule,
+                        "ideal_value": float(specification["ideal"]),
+                        "absolute_value": value,
+                        "reference_value": reference_value,
+                        "improvement_delta": improvement,
+                    }
+                )
+
     result = pd.DataFrame(rows)
     if result.empty:
         return result
@@ -385,13 +508,13 @@ def build_utility_fidelity_tradeoff_scores(
     return result
 
 
-def save_fidelity_tradeoff_heatmap_artifacts(
+def save_fidelity_privacy_tradeoff_heatmap_artifacts(
     summary: pd.DataFrame,
     utility_scores: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
     output_dir: Path,
-) -> tuple[Path, Path, Path, Path]:
-    """Save absolute fidelity and combined normalized trade-off artifacts."""
+) -> tuple[Path, Path, Path, Path, Path, Path]:
+    """Save absolute fidelity/privacy and combined normalized trade-off artifacts."""
     variants = _variant_order(summary["variant"].astype(str))
     fidelity = build_fidelity_heatmap_scores(summary)
     if fidelity.empty:
@@ -431,13 +554,52 @@ def save_fidelity_tradeoff_heatmap_artifacts(
     figure.tight_layout()
     _atomic_save_figure(figure, fidelity_image)
 
-    tradeoff = build_utility_fidelity_tradeoff_scores(
+    privacy = build_privacy_heatmap_scores(summary)
+    if privacy.empty:
+        raise ValueError("No privacy-proxy scores are available for the heatmap")
+    privacy_table = output_dir / "privacy_proxy_heatmap_scores.csv"
+    privacy_image = output_dir / "privacy_proxy_heatmap.png"
+    atomic_write_csv(privacy_table, privacy)
+    privacy_order = privacy["display_metric"].drop_duplicates().tolist()
+    raw_privacy = privacy.pivot(
+        index="display_metric", columns="variant", values="absolute_value"
+    ).reindex(index=privacy_order, columns=variants)
+    privacy_colors = privacy.pivot(
+        index="display_metric", columns="variant", values="normalized_privacy_risk"
+    ).reindex(index=privacy_order, columns=variants)
+    figure, axis = plt.subplots(
+        1, 1, figsize=(10, max(4.5, 0.75 * len(privacy_order) + 2.0))
+    )
+    sns.heatmap(
+        privacy_colors,
+        annot=raw_privacy,
+        fmt=".3f",
+        cmap="YlOrRd",
+        vmin=0.0,
+        vmax=1.0,
+        linewidths=0.5,
+        linecolor="white",
+        mask=raw_privacy.isna(),
+        cbar_kws={"label": "Relative privacy risk within each proxy"},
+        ax=axis,
+    )
+    axis.set_title(
+        "Absolute privacy proxies (distance ratio 1.0 = held-out-real baseline)"
+    )
+    axis.set_xlabel("Ablation variant")
+    axis.set_ylabel("Privacy proxy (not a formal guarantee)")
+    axis.tick_params(axis="x", rotation=0)
+    axis.tick_params(axis="y", rotation=0)
+    figure.tight_layout()
+    _atomic_save_figure(figure, privacy_image)
+
+    tradeoff = build_utility_fidelity_privacy_tradeoff_scores(
         summary, utility_scores, utility_tasks
     )
     if tradeoff.empty:
         raise ValueError("No utility/fidelity trade-off scores are available")
-    tradeoff_table = output_dir / "utility_fidelity_tradeoff_scores.csv"
-    tradeoff_image = output_dir / "utility_fidelity_tradeoff_heatmap.png"
+    tradeoff_table = output_dir / "utility_fidelity_privacy_tradeoff_scores.csv"
+    tradeoff_image = output_dir / "utility_fidelity_privacy_tradeoff_heatmap.png"
     atomic_write_csv(tradeoff_table, tradeoff)
     tradeoff_order = tradeoff["display_metric"].drop_duplicates().tolist()
     raw_tradeoff = tradeoff.pivot(
@@ -464,7 +626,7 @@ def save_fidelity_tradeoff_heatmap_artifacts(
         ax=axis,
     )
     axis.set_title(
-        "Utility versus real-only; fidelity versus A0 (positive = improvement)"
+        "Utility vs real-only; fidelity/privacy proxy vs A0 (positive = improvement)"
     )
     axis.set_xlabel("Ablation variant")
     axis.set_ylabel("Measurement and reference")
@@ -472,7 +634,14 @@ def save_fidelity_tradeoff_heatmap_artifacts(
     axis.tick_params(axis="y", rotation=0)
     figure.tight_layout()
     _atomic_save_figure(figure, tradeoff_image)
-    return fidelity_table, fidelity_image, tradeoff_table, tradeoff_image
+    return (
+        fidelity_table,
+        fidelity_image,
+        privacy_table,
+        privacy_image,
+        tradeoff_table,
+        tradeoff_image,
+    )
 
 
 def save_ablation_heatmap_artifacts(
@@ -487,7 +656,7 @@ def save_ablation_heatmap_artifacts(
         summary, real_only, utility_tasks, output_dir
     )
     utility_scores = pd.read_csv(utility_table)
-    fidelity_paths = save_fidelity_tradeoff_heatmap_artifacts(
+    fidelity_paths = save_fidelity_privacy_tradeoff_heatmap_artifacts(
         summary, utility_scores, utility_tasks, output_dir
     )
     return [utility_table, utility_image, *fidelity_paths]

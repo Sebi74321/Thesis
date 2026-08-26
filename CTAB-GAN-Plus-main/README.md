@@ -32,13 +32,17 @@ completed A0-A5 variant and reports ROC-AUC, PR-AUC, accuracy, balanced
 accuracy, macro precision/recall/F1, and positive-class precision/recall/F1
 for both mortality training regimes on a common absolute 0-1 scale.
 
-`fidelity_heatmap.png` annotates absolute fidelity values while coloring each
-metric from its best to worst variant. `utility_fidelity_tradeoff_heatmap.png`
-aligns directions before coloring: utility deltas use the real-only reference,
-fidelity errors use A0, and detector AUC/average precision use movement toward
-the chance target of 0.5. Positive cells therefore always indicate an
-improvement. Exact raw values, references, direction rules, deltas, and
-per-metric normalized colors are retained in the corresponding CSV artifacts.
+`fidelity_heatmap.png` and `privacy_proxy_heatmap.png` annotate absolute values
+while coloring each metric from its best to worst variant. The privacy panel
+includes exact matches and synthetic-to-heldout nearest-neighbor distance
+ratios at p5, p50, and p95; ratio 1.0 means equal distance to the real training
+set. `utility_fidelity_privacy_tradeoff_heatmap.png` aligns directions before
+coloring: utility deltas use the real-only reference, fidelity and privacy-proxy
+deltas use A0, and detector AUC/average precision use movement toward the
+chance target of 0.5. Positive cells therefore always indicate an improvement.
+Exact raw values, references, direction rules, deltas, and per-metric
+normalized colors are retained in the corresponding CSV artifacts. These
+privacy metrics are memorization-risk proxies, not a formal privacy guarantee.
 
 ### Measurement-aware generation and priority sensitivity
 
