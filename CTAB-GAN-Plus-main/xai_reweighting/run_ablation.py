@@ -20,7 +20,6 @@ from .augmentation import create_uniform_augmentation, create_weighted_augmentat
 from .data_split import create_data_splits
 from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
-from .dp_accounting import upstream_privacy_accounting
 from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
@@ -160,8 +159,8 @@ def _load_config(path: Path) -> Dict[str, Any]:
         raise ValueError(
             f"Unknown generator_name {generator_name!r}; choose from {VALID_GENERATORS}"
         )
-    if generator_name == "dp_cgan" and config["generator"].get("private") is not True:
-        raise ValueError("dp_cgan weighted retraining requires generator.private=true")
+    if generator_name == "dp_cgan" and config["generator"].get("private", False) is not False:
+        raise ValueError("dp_cgan is a non-private baseline; set generator.private=false")
     config["generator_name"] = generator_name
     config["generator"].setdefault(
         "categorical_columns", list(config["categorical_cols"])
@@ -334,6 +333,9 @@ def _save_training_artifacts(
     diagnostics["convergence_warnings"] = convergence_warnings
     diagnostics["convergence_warning_count"] = len(convergence_warnings)
     diagnostics["generator_name"] = generator_name
+    if generator_name == "dp_cgan":
+        diagnostics["differential_privacy_enabled"] = False
+        diagnostics["backend_mode"] = "non_private_baseline"
     if training_rows is not None:
         diagnostics["training_rows"] = int(training_rows)
     settings = generator_config or {}
@@ -401,15 +403,6 @@ def _fit_and_save_training(
         model, output_dir / f"model_checkpoint_{variant}{suffix}"
     )
     atomic_write_json(output_dir / f"training_diagnostics_{variant}.json", diagnostics)
-    if generator_name == "dp_cgan":
-        privacy = upstream_privacy_accounting(model, len(data), generator_config or {})
-        privacy["pipeline_privacy_scope"] = (
-            "Generator training only; A0 audit signals, weighting, evaluation, and released "
-            "artifacts are not covered by an end-to-end DP guarantee."
-        )
-        privacy["variant"] = variant
-        atomic_write_json(output_dir / f"privacy_accounting_{variant}.json", privacy)
-        diagnostics["privacy_accounting"] = privacy
     return diagnostics
 
 
@@ -640,11 +633,6 @@ def run_experiment(
             training_diagnostics_by_variant["A0"] = json.loads(
                 training_path.read_text(encoding="utf-8")
             )
-            privacy_path = output_dir / "privacy_accounting_A0.json"
-            if privacy_path.exists():
-                training_diagnostics_by_variant["A0"]["privacy_accounting"] = json.loads(
-                    privacy_path.read_text(encoding="utf-8")
-                )
     else:
         baseline_model = make_adapter("A0")
         training_diagnostics_by_variant["A0"] = _fit_and_save_training(
@@ -976,15 +964,6 @@ def run_experiment(
             "warning_unstable_tail"
         )
         metrics["mixture_all_converged"] = training_audit.get("mixture_all_converged")
-        privacy = training_audit.get("privacy_accounting", {})
-        for key in (
-            "upstream_reported_epsilon",
-            "epsilon_recomputed_upstream_steps",
-            "epsilon_recomputed_actual_updates",
-            "privacy_claim_status",
-        ):
-            if key in privacy:
-                metrics[key] = privacy[key]
         atomic_write_json(metrics_path, metrics)
         atomic_write_csv(output_dir / f"feature_metrics_{variant}.csv", details)
         feature_details_by_variant[variant] = details

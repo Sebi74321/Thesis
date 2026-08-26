@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager, redirect_stdout
 import os
 from pathlib import Path
-import re
 import sys
 from typing import Any, Dict, Mapping, Optional
 import warnings
@@ -432,10 +431,12 @@ class CTGANAdapter(GeneratorAdapter):
 
 
 class DPCGANAdapter(GeneratorAdapter):
-    """Adapter for ``dp-cgans`` 0.2.0 using its upstream private mode."""
+    """Adapter for the ``dp-cgans`` 0.2.0 architecture in non-private mode.
 
-    NOISE_MULTIPLIER = 1.0
-    DELTA = 2e-6
+    The backend name is retained for registry/configuration compatibility, but
+    this experiment intentionally disables the upstream privacy mechanism so
+    it is a model-quality baseline rather than a differential-privacy claim.
+    """
 
     def __init__(
         self,
@@ -451,7 +452,7 @@ class DPCGANAdapter(GeneratorAdapter):
         verbose=True,
         epochs=100,
         pac=10,
-        private=True,
+        private=False,
         saved_transformer=None,
         device: torch.device | str = "cpu",
         seed: int = 42,
@@ -462,8 +463,10 @@ class DPCGANAdapter(GeneratorAdapter):
         work_dir: Path | str | None = None,
         **unused,
     ):
-        if private is not True:
-            raise ValueError("dp_cgan is reserved for upstream private=True runs")
+        if private is not False:
+            raise ValueError(
+                "dp_cgan is configured as a non-private baseline; set private=false"
+            )
         if batch_size % pac:
             raise ValueError("DP-CGAN batch_size must be divisible by pac")
         self.categorical_columns = list(categorical_columns)
@@ -485,7 +488,7 @@ class DPCGANAdapter(GeneratorAdapter):
             "verbose": bool(verbose and progress != "off"),
             "epochs": int(epochs),
             "pac": int(pac),
-            "private": True,
+            "private": False,
             "saved_transformer": saved_transformer,
             "cuda": str(self.device) if self.device.type == "cuda" else False,
         }
@@ -500,7 +503,8 @@ class DPCGANAdapter(GeneratorAdapter):
         self.mixture_diagnostics = []
         self.convergence_warnings = []
         self.upstream_stdout = ""
-        self.upstream_reported_epsilon = None
+        self.differential_privacy_enabled = False
+        self.backend_mode = "non_private_baseline"
         self._sample_calls = 0
 
     def fit(self, df: pd.DataFrame) -> None:
@@ -529,9 +533,6 @@ class DPCGANAdapter(GeneratorAdapter):
             with redirect_stdout(tee):
                 self.model.fit(train_df)
         self.upstream_stdout = tee.text
-        matches = re.findall(r"differential privacy with eps\s*=\s*([0-9.eE+-]+)", tee.text)
-        if matches:
-            self.upstream_reported_epsilon = float(matches[-1])
         self.convergence_warnings = [
             str(item.message) for item in caught if issubclass(item.category, ConvergenceWarning)
         ]

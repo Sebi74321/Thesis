@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 
 from .data_split import create_data_splits
-from .dp_accounting import upstream_privacy_accounting
 from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
@@ -121,11 +120,13 @@ def _model_config(config: dict, model_name: str, smoke: bool) -> dict:
     return values
 
 
-def _privacy_accounting(model, train_rows: int, model_config: dict) -> dict[str, Any]:
-    return upstream_privacy_accounting(model, train_rows, model_config)
-
-
-def _training_artifacts(model, output_dir: Path, model_config: dict, train_rows: int) -> dict:
+def _training_artifacts(
+    model,
+    output_dir: Path,
+    model_config: dict,
+    train_rows: int,
+    model_name: str | None = None,
+) -> dict:
     history = getattr(model, "training_history", pd.DataFrame())
     if not isinstance(history, pd.DataFrame):
         history = pd.DataFrame(history)
@@ -144,6 +145,9 @@ def _training_artifacts(model, output_dir: Path, model_config: dict, train_rows:
     diagnostics["discriminator_updates"] = (
         diagnostics["generator_updates"] * int(model_config.get("discriminator_steps", 1))
     )
+    if model_name == "dp_cgan":
+        diagnostics["differential_privacy_enabled"] = False
+        diagnostics["backend_mode"] = "non_private_baseline"
     atomic_write_json(output_dir / "training_diagnostics.json", diagnostics)
     atomic_write_json(
         output_dir / "convergence_warnings.json", diagnostics["convergence_warnings"]
@@ -202,6 +206,11 @@ def run_model_comparison(
     missing = sorted(set(models) - set(config.get("models", {})))
     if missing:
         raise ValueError(f"Selected models are missing configurations: {missing}")
+    if (
+        "dp_cgan" in models
+        and config["models"]["dp_cgan"].get("private", False) is not False
+    ):
+        raise ValueError("dp_cgan is a non-private baseline; set private=false")
     if len(set(models)) != len(models) or len(set(seeds)) != len(seeds):
         raise ValueError("Models and seeds must not contain duplicates")
     if stage not in {"val", "test"}:
@@ -377,9 +386,6 @@ def run_model_comparison(
                 training_diagnostics = json.loads(
                     (run_dir / "training_diagnostics.json").read_text(encoding="utf-8")
                 ) if (run_dir / "training_diagnostics.json").exists() else {}
-                privacy = json.loads(
-                    (run_dir / "privacy_accounting.json").read_text(encoding="utf-8")
-                ) if (run_dir / "privacy_accounting.json").exists() else {}
             else:
                 if adapter_factory is None:
                     model = _make_adapter(
@@ -390,10 +396,12 @@ def run_model_comparison(
                 try:
                     model.fit(splits.train.copy(deep=True))
                 except Exception:
-                    _training_artifacts(model, run_dir, model_config, len(splits.train))
+                    _training_artifacts(
+                        model, run_dir, model_config, len(splits.train), model_name
+                    )
                     raise
                 training_diagnostics = _training_artifacts(
-                    model, run_dir, model_config, len(splits.train)
+                    model, run_dir, model_config, len(splits.train), model_name
                 )
                 checkpoint_suffix = ".pkl" if model_name in {"ctgan", "dp_cgan"} else ".pt"
                 _atomic_checkpoint(model, run_dir / f"model_checkpoint{checkpoint_suffix}")
@@ -410,9 +418,6 @@ def run_model_comparison(
                 if postprocessing:
                     atomic_write_json(run_dir / "postprocessing_diagnostics.json", postprocessing)
                 atomic_write_csv(synthetic_path, synthetic)
-                privacy = _privacy_accounting(model, len(splits.train), model_config) if model_name == "dp_cgan" else {}
-                if privacy:
-                    atomic_write_json(run_dir / "privacy_accounting.json", privacy)
 
             metrics, feature_details = evaluate_variant(
                 splits.train,
@@ -450,15 +455,6 @@ def run_model_comparison(
                     "convergence_warning_count": training_diagnostics.get("convergence_warning_count", 0),
                 }
             )
-            if privacy:
-                metrics["upstream_reported_epsilon"] = privacy.get("upstream_reported_epsilon")
-                metrics["epsilon_recomputed_upstream_steps"] = privacy.get(
-                    "epsilon_recomputed_upstream_steps"
-                )
-                metrics["epsilon_recomputed_actual_updates"] = privacy.get(
-                    "epsilon_recomputed_actual_updates"
-                )
-                metrics["privacy_claim_status"] = privacy["privacy_claim_status"]
             atomic_write_json(metrics_path, metrics)
             atomic_write_csv(run_dir / "feature_metrics.csv", feature_details)
             atomic_write_csv(run_dir / "rq1_region_metrics.csv", rq1_details)

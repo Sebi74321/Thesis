@@ -85,7 +85,7 @@ def test_wids_large_dataset_settings():
 def test_rq1_configs_define_all_models(name):
     config = load_rq1_config(PROJECT_ROOT / "configs" / name)
     assert set(config["models"]) == {"ctabgan_plus", "ctgan", "dp_cgan"}
-    assert config["models"]["dp_cgan"]["private"] is True
+    assert config["models"]["dp_cgan"]["private"] is False
     assert config["models"]["dp_cgan"]["saved_transformer"] is None
     assert config["models"]["dp_cgan"]["discriminator_steps"] == 10
     assert config["models"]["ctabgan_plus"]["categorical_columns"] == config["categorical_cols"]
@@ -115,7 +115,7 @@ def test_weighted_multigan_configs_inherit_dataset_protocol(
         "mortality_balanced",
     }
     if generator_name == "dp_cgan":
-        assert config["generator"]["private"] is True
+        assert config["generator"]["private"] is False
         assert config["generator"]["discriminator_steps"] == 10
 
 

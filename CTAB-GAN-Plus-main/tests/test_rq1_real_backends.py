@@ -35,11 +35,11 @@ def test_real_ctgan_and_dp_cgan_cpu_smoke(tmp_path):
         categorical_columns=["category", "target"],
         generator_dim=(16,), discriminator_dim=(16,), batch_size=50, pac=10,
         epochs=1, discriminator_steps=1, verbose=False, progress="off", device="cpu",
-        work_dir=tmp_path / "dp_backend",
+        private=False, work_dir=tmp_path / "dp_backend",
     )
     dp_cgan.fit(frame)
     generated = dp_cgan.sample(25)
     assert len(generated) == 25
     assert list(generated.columns) == list(frame.columns)
-    assert dp_cgan.upstream_reported_epsilon is not None
+    assert dp_cgan.differential_privacy_enabled is False
     dp_cgan.save_checkpoint(tmp_path / "dp_cgan.pkl")

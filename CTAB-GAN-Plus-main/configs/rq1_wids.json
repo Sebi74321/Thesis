@@ -34,7 +34,7 @@
       "verbose": true,
       "epochs": 200,
       "pac": 10,
-      "private": true,
+      "private": false,
       "saved_transformer": null,
       "smoke_epochs": 1,
       "smoke_batch_size": 500

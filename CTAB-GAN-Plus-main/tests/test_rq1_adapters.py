@@ -88,26 +88,29 @@ def test_ctgan_adapter_preserves_input_schema_and_device(fake_backends):
     assert FakeCTGAN.last_kwargs["enable_gpu"] is False
 
 
-def test_dp_adapter_forces_private_and_restores_numeric_categories(fake_backends, tmp_path):
+def test_dp_adapter_forces_non_private_baseline_and_restores_schema(
+    fake_backends, tmp_path
+):
     frame = pd.DataFrame({"value": [1.25, 2.5], "category": [1, 2], "target": [0, 1]})
     adapter = DPCGANAdapter(
         categorical_columns=["category", "target"], batch_size=10, pac=10, epochs=1,
-        private=True, device="cpu", progress="off", work_dir=tmp_path / "backend",
+        private=False, device="cpu", progress="off", work_dir=tmp_path / "backend",
     )
     adapter.fit(frame)
     generated = adapter.sample(4)
 
-    assert FakeDPCGAN.last_kwargs["private"] is True
+    assert FakeDPCGAN.last_kwargs["private"] is False
     assert FakeDPCGAN.fitted["category"].dtype == object
     assert generated.dtypes.to_dict() == frame.dtypes.to_dict()
-    assert adapter.upstream_reported_epsilon == 7.25
+    assert adapter.differential_privacy_enabled is False
+    assert adapter.backend_mode == "non_private_baseline"
     assert len(generated) == 4
 
 
-def test_dp_adapter_rejects_non_private_mode(tmp_path):
-    with pytest.raises(ValueError, match="private=True"):
+def test_dp_adapter_rejects_private_mode(tmp_path):
+    with pytest.raises(ValueError, match="private=false"):
         DPCGANAdapter(
-            categorical_columns=["target"], private=False, batch_size=10, pac=10,
+            categorical_columns=["target"], private=True, batch_size=10, pac=10,
             work_dir=tmp_path,
         )
 

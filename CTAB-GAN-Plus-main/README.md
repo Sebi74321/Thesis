@@ -82,7 +82,7 @@ contrasts other than each variant versus A0 are produced.
 ### Weighted retraining across GAN frameworks
 
 The same A0/A1/A2/A3/A4/A5 runner supports `ctabgan_plus`, `ctgan`, and the
-upstream-private `dp_cgan` adapter. Select the framework through its config;
+`dp_cgan` architecture in non-private baseline mode. Select the framework through its config;
 the split, A0-derived audit signals, augmentation size, evaluation protocol,
 and controlled deltas remain identical:
 
@@ -95,11 +95,11 @@ python -m xai_reweighting.run_ablation --config configs/wids_dpcgan.json  --stag
 
 Each variant trains a fresh instance in an isolated backend directory and
 saves a model-specific checkpoint, loss history, convergence warnings, and
-environment/configuration metadata. DP-CGAN always uses `private=true` and
-saves `privacy_accounting_<variant>.json`. Those values are explicitly labeled
-as upstream implementation estimates: the upstream package does not implement
-conventional per-example DP-SGD clipping, and the external A0 audit, weighting,
-evaluation, and released artifacts are not covered by an end-to-end DP claim.
+environment/configuration metadata. The `dp_cgan` backend always uses
+`private=false`; no noise multiplier, delta, epsilon, clipping, or privacy
+accounting is applied or reported. It is therefore a comparison of the
+DP-CGANS package's generator architecture, not a differentially private model
+or an end-to-end DP pipeline.
 
 ### Reevaluate a completed run without GAN training
 

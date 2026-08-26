@@ -14,7 +14,7 @@
     "verbose": true,
     "epochs": 150,
     "pac": 10,
-    "private": true,
+    "private": false,
     "saved_transformer": null
   }
 }

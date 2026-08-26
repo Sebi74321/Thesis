@@ -59,7 +59,7 @@ def test_ablation_adapter_uses_generator_registry(generator_name, tmp_path, monk
     assert captured["work_dir"] == tmp_path / "backend"
 
 
-def test_dp_weighted_fit_saves_checkpoint_and_variant_privacy(tmp_path):
+def test_dp_weighted_fit_saves_non_private_checkpoint_without_accounting(tmp_path):
     model = FakeGenerator()
     training = pd.DataFrame({"x": range(20), "target": [0, 1] * 10})
     diagnostics = _fit_and_save_training(
@@ -72,15 +72,15 @@ def test_dp_weighted_fit_saves_checkpoint_and_variant_privacy(tmp_path):
             "batch_size": 10,
             "epochs": 2,
             "discriminator_steps": 10,
+            "private": False,
         },
     )
 
     assert diagnostics["checkpoint_saved"] is True
     assert (tmp_path / "model_checkpoint_A5.pkl").exists()
-    privacy = json.loads((tmp_path / "privacy_accounting_A5.json").read_text())
-    assert privacy["private"] is True
-    assert privacy["variant"] == "A5"
-    assert "not covered" in privacy["pipeline_privacy_scope"]
+    assert diagnostics["differential_privacy_enabled"] is False
+    assert diagnostics["backend_mode"] == "non_private_baseline"
+    assert not (tmp_path / "privacy_accounting_A5.json").exists()
 
 
 def test_controlled_deltas_use_a0_and_real_utility_references():
