@@ -40,6 +40,7 @@ from .scoring import (
     compute_row_weights,
     weight_diagnostics,
 )
+from .utility_reporting import save_utility_heatmap_artifacts
 
 VALID_VARIANTS = ("A0", "A1", "A2", "A3", "A4", "A5")
 VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
@@ -978,6 +979,9 @@ def run_experiment(
     )
     atomic_write_csv(output_dir / "ablation_summary.csv", summary)
     atomic_write_csv(output_dir / "ablation_deltas.csv", delta_rows)
+    save_utility_heatmap_artifacts(
+        summary, real_only_utility, utility_tasks, output_dir
+    )
     ranking_path = output_dir / "baseline_detector_feature_ranking.csv"
     if ranking_path.exists() and feature_details_by_variant:
         atomic_write_csv(

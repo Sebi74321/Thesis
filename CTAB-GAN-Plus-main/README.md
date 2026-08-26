@@ -26,6 +26,12 @@ record the achieved positive/negative counts in their CSV artifacts. The same
 artifacts also retain the raw real and synthetic mortality rates, the
 counterfactual unadjusted mixture rate, and the applied prevalence adjustment.
 
+Each ablation run also writes `utility_heatmap_scores.csv` and
+`utility_heatmap.png`. The heatmap places the real-only reference above every
+completed A0-A5 variant and reports ROC-AUC, PR-AUC, accuracy, balanced
+accuracy, macro precision/recall/F1, and positive-class precision/recall/F1
+for both mortality training regimes on a common absolute 0-1 scale.
+
 ### Measurement-aware generation and priority sensitivity
 
 CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
@@ -48,7 +54,7 @@ physiological family. The mapping is saved in
 `feature_family_detector_sensitivity.csv` and
 `feature_family_utility_sensitivity.csv` report what happens when each selected
 family, or every selected feature, is ignored. The latter covers both mortality
-and gender utility. These are evaluation-only sensitivity analyses; they do not
+training regimes. These are evaluation-only sensitivity analyses; they do not
 remove the columns from GAN training.
 
 `top_shap_feature_variant_metrics.csv` follows the A0 detector's top SHAP
