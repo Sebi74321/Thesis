@@ -65,20 +65,87 @@ class DiscriminatorTabularWrapper(torch.nn.Module):
 
 
 def encoded_feature_slices(transformer, feature_names: Sequence[str]) -> dict[str, slice]:
-    """Map each original column to its contiguous CTAB+ encoded coordinates."""
+    """Map each original column to its contiguous CTAB+ encoded coordinates.
+
+    CTAB+'s native ``DataTransformer.output_info`` is a *flat* list of
+    activation spans, not a list with exactly one item per source column.
+    Continuous mixture-model columns and mixed columns each emit two spans
+    (a scalar value and a component/modal one-hot vector), while categorical
+    and general continuous columns emit one. Use the transformer's original
+    column metadata to group those spans before aggregating SHAP values.
+
+    A nested one-entry-per-column representation is retained as a fallback for
+    lightweight/test transformers that do not expose CTAB+'s ``meta`` field.
+    """
     output_info = list(transformer.output_info)
-    if len(output_info) != len(feature_names):
-        raise ValueError(
-            "Transformer output metadata does not match the original feature count: "
-            f"{len(output_info)} metadata entries for {len(feature_names)} features"
-        )
+    metadata = getattr(transformer, "meta", None)
+
+    def span_width(span: Any) -> int:
+        # Native CTAB+: (width, activation[, tag]). Older test doubles and
+        # CTGAN-like transformers may group several such tuples in a list.
+        if not isinstance(span, (tuple, list)) or not span:
+            raise ValueError(f"Invalid transformer output span: {span!r}")
+        if isinstance(span[0], (tuple, list)):
+            return sum(span_width(item) for item in span)
+        width = int(span[0])
+        if width <= 0:
+            raise ValueError(f"Transformer output span has invalid width: {span!r}")
+        return width
+
+    if metadata is None:
+        if len(output_info) != len(feature_names):
+            raise ValueError(
+                "Transformer without original-column metadata must provide one "
+                "output_info entry per feature: "
+                f"{len(output_info)} entries for {len(feature_names)} features"
+            )
+        grouped_spans = [[span] for span in output_info]
+    else:
+        metadata = list(metadata)
+        if len(metadata) != len(feature_names):
+            raise ValueError(
+                "Transformer original-column metadata does not match the feature count: "
+                f"{len(metadata)} columns for {len(feature_names)} features"
+            )
+        general_columns = {
+            int(index) for index in getattr(transformer, "general_columns", [])
+        }
+        grouped_spans = []
+        span_index = 0
+        for column_index, column_metadata in enumerate(metadata):
+            if not isinstance(column_metadata, Mapping):
+                raise ValueError(
+                    "Transformer original-column metadata entries must be mappings; "
+                    f"column {column_index} is {column_metadata!r}"
+                )
+            column_type = column_metadata.get("type")
+            if column_type not in {"categorical", "continuous", "mixed"}:
+                raise ValueError(
+                    "Unsupported transformer column type for "
+                    f"{feature_names[column_index]!r}: {column_type!r}"
+                )
+            span_count = 2 if (
+                column_type == "mixed"
+                or (column_type == "continuous" and column_index not in general_columns)
+            ) else 1
+            next_index = span_index + span_count
+            if next_index > len(output_info):
+                raise ValueError(
+                    "Transformer output metadata ended while mapping original column "
+                    f"{feature_names[column_index]!r}"
+                )
+            grouped_spans.append(output_info[span_index:next_index])
+            span_index = next_index
+        if span_index != len(output_info):
+            raise ValueError(
+                "Transformer output metadata contains unmapped activation spans: "
+                f"mapped {span_index} of {len(output_info)}"
+            )
 
     result: dict[str, slice] = {}
     start = 0
-    for feature, info in zip(feature_names, output_info):
-        width = sum(int(item[0]) for item in info)
-        if width <= 0:
-            raise ValueError(f"Feature {feature!r} has no encoded coordinates")
+    for feature, spans in zip(feature_names, grouped_spans):
+        width = sum(span_width(span) for span in spans)
         result[str(feature)] = slice(start, start + width)
         start += width
 

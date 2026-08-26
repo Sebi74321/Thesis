@@ -41,6 +41,51 @@ def test_encoded_shap_is_aggregated_to_original_features():
     assert result.loc["category", "mean_abs_shap"] == pytest.approx(3.0)
 
 
+def test_native_ctab_output_spans_are_grouped_by_original_feature():
+    """A mixed CTAB+ column emits two output_info entries, not one."""
+    transformer = SimpleNamespace(
+        meta=[
+            {"type": "continuous"},
+            {"type": "mixed"},
+            {"type": "categorical"},
+        ],
+        general_columns=[0],
+        output_info=[
+            (1, "tanh", "yes_g"),
+            (1, "tanh", "no_g"),
+            (3, "softmax"),
+            (2, "softmax"),
+        ],
+        output_dim=7,
+    )
+
+    slices = encoded_feature_slices(
+        transformer, ["general", "spo2_max", "outcome"]
+    )
+
+    assert slices == {
+        "general": slice(0, 1),
+        "spo2_max": slice(1, 5),
+        "outcome": slice(5, 7),
+    }
+
+
+def test_native_ctab_31_features_can_have_32_output_spans():
+    feature_names = [f"feature_{index}" for index in range(30)] + ["spo2_max"]
+    transformer = SimpleNamespace(
+        meta=[{"type": "categorical"} for _ in range(30)] + [{"type": "mixed"}],
+        general_columns=[],
+        output_info=[(1, "softmax") for _ in range(30)]
+        + [(1, "tanh", "no_g"), (4, "softmax")],
+        output_dim=35,
+    )
+
+    slices = encoded_feature_slices(transformer, feature_names)
+
+    assert len(slices) == 31
+    assert slices["spo2_max"] == slice(30, 35)
+
+
 def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch):
     class FakeGradientExplainer:
         backgrounds = []
