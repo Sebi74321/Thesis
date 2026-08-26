@@ -19,7 +19,7 @@ from .run_ablation import VALID_VARIANTS, _build_controlled_deltas
 from .run_diagnostics import run_existing_diagnostics
 from .run_mixed_utility import run_existing_mixed_utility
 from .utility_balance import replace_legacy_gender_task
-from .utility_reporting import save_utility_heatmap_artifacts
+from .utility_reporting import save_ablation_heatmap_artifacts
 
 
 _PRESERVED_METRIC_FIELDS = {
@@ -277,7 +277,7 @@ def run_existing_evaluation(
         )
         atomic_write_csv(run_dir / "ablation_summary.csv", summary)
         atomic_write_csv(run_dir / "ablation_deltas.csv", deltas)
-        save_utility_heatmap_artifacts(summary, real_only, utility_tasks, run_dir)
+        save_ablation_heatmap_artifacts(summary, real_only, utility_tasks, run_dir)
 
         if run_diagnostics:
             report("Recomputing detector, priority, and feature-exclusion diagnostics")
@@ -304,6 +304,10 @@ def run_existing_evaluation(
                     "ablation_deltas.csv",
                     "utility_heatmap_scores.csv",
                     "utility_heatmap.png",
+                    "fidelity_heatmap_scores.csv",
+                    "fidelity_heatmap.png",
+                    "utility_fidelity_tradeoff_scores.csv",
+                    "utility_fidelity_tradeoff_heatmap.png",
                     *(
                         ["top_shap_feature_variant_metrics.csv"]
                         if (run_dir / "top_shap_feature_variant_metrics.csv").is_file()

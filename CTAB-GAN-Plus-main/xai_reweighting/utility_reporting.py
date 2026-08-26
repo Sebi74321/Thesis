@@ -1,4 +1,4 @@
-"""Utility-evaluation tables and heatmaps for ablation runs."""
+"""Direction-aware utility, fidelity, and trade-off heatmaps for ablations."""
 
 from __future__ import annotations
 
@@ -27,6 +27,90 @@ UTILITY_SCORE_LABELS: dict[str, str] = {
     "positive_recall": "Positive recall",
     "positive_f1": "Positive F1",
 }
+
+FIDELITY_SCORE_SPECS: dict[str, dict[str, Any]] = {
+    "mean_wasserstein_scaled": {
+        "label": "Scaled Wasserstein",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_ks": {"label": "Mean KS", "ideal": 0.0, "direction": "lower"},
+    "mean_jensen_shannon": {
+        "label": "Jensen-Shannon",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "correlation_distance": {
+        "label": "Correlation distance",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_cdf_tail_divergence": {
+        "label": "Tail-CDF divergence",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_q05_lower_mass_error": {
+        "label": "Lower 5% mass error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_q95_upper_mass_error": {
+        "label": "Upper 5% mass error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_q99_upper_mass_error": {
+        "label": "Upper 1% mass error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_q95_quantile_error_scaled": {
+        "label": "Scaled q95 error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_q99_quantile_error_scaled": {
+        "label": "Scaled q99 error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "mean_rare_category_frequency_error": {
+        "label": "Rare-category error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "rare_outcome_frequency_error": {
+        "label": "Rare-outcome error",
+        "ideal": 0.0,
+        "direction": "lower",
+    },
+    "detector_auc": {
+        "label": "Detector AUC",
+        "ideal": 0.5,
+        "direction": "target",
+    },
+    "detector_average_precision": {
+        "label": "Detector average precision",
+        "ideal": 0.5,
+        "direction": "target",
+    },
+}
+
+
+def _atomic_save_figure(figure, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=path.name, suffix=".tmp", dir=path.parent
+    )
+    os.close(descriptor)
+    try:
+        figure.savefig(temporary, format="png", dpi=180, bbox_inches="tight")
+        os.replace(temporary, path)
+    finally:
+        plt.close(figure)
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _variant_order(variants: Iterable[str]) -> list[str]:
@@ -160,15 +244,250 @@ def save_utility_heatmap_artifacts(
     )
     figure.tight_layout()
 
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=image_path.name, suffix=".tmp", dir=output_dir
-    )
-    os.close(descriptor)
-    try:
-        figure.savefig(temporary, format="png", dpi=180, bbox_inches="tight")
-        os.replace(temporary, image_path)
-    finally:
-        plt.close(figure)
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    _atomic_save_figure(figure, image_path)
     return table_path, image_path
+
+
+def build_fidelity_heatmap_scores(summary: pd.DataFrame) -> pd.DataFrame:
+    """Return absolute fidelity values plus direction-aware relative coloring."""
+    if "variant" not in summary:
+        raise ValueError("Ablation summary must contain a variant column")
+    variants = _variant_order(summary["variant"].astype(str))
+    indexed = summary.assign(variant=summary["variant"].astype(str)).set_index("variant")
+    rows: list[dict[str, Any]] = []
+    for metric, specification in FIDELITY_SCORE_SPECS.items():
+        if metric not in indexed:
+            continue
+        values = pd.to_numeric(indexed.loc[variants, metric], errors="coerce")
+        ideal = float(specification["ideal"])
+        discrepancy = (values - ideal).abs()
+        finite = discrepancy[np.isfinite(discrepancy)]
+        if finite.empty:
+            normalized = pd.Series(np.nan, index=values.index)
+        elif np.isclose(float(finite.max()), float(finite.min())):
+            normalized = pd.Series(0.5, index=values.index)
+            normalized[values.isna()] = np.nan
+        else:
+            normalized = (discrepancy - float(finite.min())) / (
+                float(finite.max()) - float(finite.min())
+            )
+        for variant in variants:
+            rows.append(
+                {
+                    "variant": variant,
+                    "metric": metric,
+                    "display_metric": str(specification["label"]),
+                    "direction": str(specification["direction"]),
+                    "ideal_value": ideal,
+                    "absolute_value": values.loc[variant],
+                    "distance_from_ideal": discrepancy.loc[variant],
+                    "normalized_discrepancy": normalized.loc[variant],
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def build_utility_fidelity_tradeoff_scores(
+    summary: pd.DataFrame,
+    utility_scores: pd.DataFrame,
+    utility_tasks: Iterable[Mapping[str, Any]],
+) -> pd.DataFrame:
+    """Align every delta so positive means improvement and normalize per metric."""
+    variants = _variant_order(summary["variant"].astype(str))
+    indexed = summary.assign(variant=summary["variant"].astype(str)).set_index("variant")
+    rows: list[dict[str, Any]] = []
+
+    for task in utility_tasks:
+        task_name = str(task["name"])
+        task_label = task_name.replace("_", " ").title()
+        task_scores = utility_scores[utility_scores["utility_task"] == task_name]
+        if task_scores.empty:
+            continue
+        task_indexed = task_scores.set_index("variant")
+        if "REAL" not in task_indexed.index:
+            raise ValueError(f"Utility trade-off reference is missing for {task_name!r}")
+        for metric, label in UTILITY_SCORE_LABELS.items():
+            reference_value = pd.to_numeric(
+                task_indexed.loc["REAL", metric], errors="coerce"
+            )
+            variant_values = pd.to_numeric(
+                task_indexed.reindex(variants)[metric], errors="coerce"
+            )
+            if not np.isfinite(reference_value) or not variant_values.notna().any():
+                continue
+            metric_key = f"utility_{task_name}_{metric}"
+            for variant in variants:
+                value = variant_values.loc[variant]
+                rows.append(
+                    {
+                        "domain": "utility",
+                        "utility_task": task_name,
+                        "metric": metric,
+                        "metric_key": metric_key,
+                        "display_metric": f"Utility | {task_label} | {label}",
+                        "variant": variant,
+                        "reference": "REAL",
+                        "direction_rule": "variant_minus_real",
+                        "ideal_value": 1.0,
+                        "absolute_value": value,
+                        "reference_value": reference_value,
+                        "improvement_delta": value - reference_value,
+                    }
+                )
+
+    if "A0" not in indexed.index:
+        raise ValueError("Fidelity trade-off normalization requires the A0 reference")
+    for metric, specification in FIDELITY_SCORE_SPECS.items():
+        if metric not in indexed:
+            continue
+        reference_value = pd.to_numeric(indexed.loc["A0", metric], errors="coerce")
+        if not np.isfinite(reference_value):
+            continue
+        direction = str(specification["direction"])
+        ideal = float(specification["ideal"])
+        for variant in variants:
+            value = pd.to_numeric(indexed.loc[variant, metric], errors="coerce")
+            if direction == "target":
+                improvement = abs(reference_value - ideal) - abs(value - ideal)
+                rule = "a0_distance_to_ideal_minus_variant_distance_to_ideal"
+            else:
+                improvement = reference_value - value
+                rule = "a0_error_minus_variant_error"
+            rows.append(
+                {
+                    "domain": "fidelity",
+                    "utility_task": None,
+                    "metric": metric,
+                    "metric_key": f"fidelity_{metric}",
+                    "display_metric": f"Fidelity | {specification['label']}",
+                    "variant": variant,
+                    "reference": "A0",
+                    "direction_rule": rule,
+                    "ideal_value": ideal,
+                    "absolute_value": value,
+                    "reference_value": reference_value,
+                    "improvement_delta": improvement,
+                }
+            )
+
+    result = pd.DataFrame(rows)
+    if result.empty:
+        return result
+    result["normalized_improvement"] = np.nan
+    for _, indices in result.groupby("metric_key", sort=False).groups.items():
+        values = pd.to_numeric(result.loc[indices, "improvement_delta"], errors="coerce")
+        maximum = float(values.abs().max(skipna=True))
+        if np.isfinite(maximum) and maximum > 0:
+            result.loc[indices, "normalized_improvement"] = values / maximum
+        else:
+            result.loc[indices, "normalized_improvement"] = 0.0
+            result.loc[values.index[values.isna()], "normalized_improvement"] = np.nan
+    return result
+
+
+def save_fidelity_tradeoff_heatmap_artifacts(
+    summary: pd.DataFrame,
+    utility_scores: pd.DataFrame,
+    utility_tasks: Iterable[Mapping[str, Any]],
+    output_dir: Path,
+) -> tuple[Path, Path, Path, Path]:
+    """Save absolute fidelity and combined normalized trade-off artifacts."""
+    variants = _variant_order(summary["variant"].astype(str))
+    fidelity = build_fidelity_heatmap_scores(summary)
+    if fidelity.empty:
+        raise ValueError("No fidelity scores are available for the heatmap")
+    fidelity_table = output_dir / "fidelity_heatmap_scores.csv"
+    fidelity_image = output_dir / "fidelity_heatmap.png"
+    atomic_write_csv(fidelity_table, fidelity)
+
+    metric_order = fidelity["display_metric"].drop_duplicates().tolist()
+    raw_fidelity = fidelity.pivot(
+        index="display_metric", columns="variant", values="absolute_value"
+    ).reindex(index=metric_order, columns=variants)
+    fidelity_colors = fidelity.pivot(
+        index="display_metric", columns="variant", values="normalized_discrepancy"
+    ).reindex(index=metric_order, columns=variants)
+    figure, axis = plt.subplots(
+        1, 1, figsize=(10, max(7.0, 0.58 * len(metric_order) + 2.0))
+    )
+    sns.heatmap(
+        fidelity_colors,
+        annot=raw_fidelity,
+        fmt=".3f",
+        cmap="YlOrRd",
+        vmin=0.0,
+        vmax=1.0,
+        linewidths=0.5,
+        linecolor="white",
+        mask=raw_fidelity.isna(),
+        cbar_kws={"label": "Relative discrepancy within each metric"},
+        ax=axis,
+    )
+    axis.set_title("Absolute fidelity values (color: best to worst within metric)")
+    axis.set_xlabel("Ablation variant")
+    axis.set_ylabel("Fidelity measurement")
+    axis.tick_params(axis="x", rotation=0)
+    axis.tick_params(axis="y", rotation=0)
+    figure.tight_layout()
+    _atomic_save_figure(figure, fidelity_image)
+
+    tradeoff = build_utility_fidelity_tradeoff_scores(
+        summary, utility_scores, utility_tasks
+    )
+    if tradeoff.empty:
+        raise ValueError("No utility/fidelity trade-off scores are available")
+    tradeoff_table = output_dir / "utility_fidelity_tradeoff_scores.csv"
+    tradeoff_image = output_dir / "utility_fidelity_tradeoff_heatmap.png"
+    atomic_write_csv(tradeoff_table, tradeoff)
+    tradeoff_order = tradeoff["display_metric"].drop_duplicates().tolist()
+    raw_tradeoff = tradeoff.pivot(
+        index="display_metric", columns="variant", values="improvement_delta"
+    ).reindex(index=tradeoff_order, columns=variants)
+    normalized_tradeoff = tradeoff.pivot(
+        index="display_metric", columns="variant", values="normalized_improvement"
+    ).reindex(index=tradeoff_order, columns=variants)
+    figure, axis = plt.subplots(
+        1, 1, figsize=(11, max(10.0, 0.48 * len(tradeoff_order) + 2.0))
+    )
+    sns.heatmap(
+        normalized_tradeoff,
+        annot=raw_tradeoff,
+        fmt="+.3f",
+        cmap="RdYlGn",
+        center=0.0,
+        vmin=-1.0,
+        vmax=1.0,
+        linewidths=0.5,
+        linecolor="white",
+        mask=raw_tradeoff.isna(),
+        cbar_kws={"label": "Normalized improvement (-1 to +1)"},
+        ax=axis,
+    )
+    axis.set_title(
+        "Utility versus real-only; fidelity versus A0 (positive = improvement)"
+    )
+    axis.set_xlabel("Ablation variant")
+    axis.set_ylabel("Measurement and reference")
+    axis.tick_params(axis="x", rotation=0)
+    axis.tick_params(axis="y", rotation=0)
+    figure.tight_layout()
+    _atomic_save_figure(figure, tradeoff_image)
+    return fidelity_table, fidelity_image, tradeoff_table, tradeoff_image
+
+
+def save_ablation_heatmap_artifacts(
+    summary: pd.DataFrame,
+    real_only: pd.DataFrame,
+    utility_tasks: Iterable[Mapping[str, Any]],
+    output_dir: Path,
+) -> list[Path]:
+    """Save all absolute and direction-aware ablation heatmaps."""
+    utility_tasks = list(utility_tasks)
+    utility_table, utility_image = save_utility_heatmap_artifacts(
+        summary, real_only, utility_tasks, output_dir
+    )
+    utility_scores = pd.read_csv(utility_table)
+    fidelity_paths = save_fidelity_tradeoff_heatmap_artifacts(
+        summary, utility_scores, utility_tasks, output_dir
+    )
+    return [utility_table, utility_image, *fidelity_paths]

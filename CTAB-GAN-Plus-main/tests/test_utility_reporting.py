@@ -2,8 +2,12 @@ import numpy as np
 import pandas as pd
 
 from xai_reweighting.utility_reporting import (
+    FIDELITY_SCORE_SPECS,
     UTILITY_SCORE_LABELS,
+    build_fidelity_heatmap_scores,
     build_utility_heatmap_scores,
+    build_utility_fidelity_tradeoff_scores,
+    save_ablation_heatmap_artifacts,
     save_utility_heatmap_artifacts,
 )
 
@@ -72,3 +76,63 @@ def test_missing_utility_measurement_remains_missing_instead_of_zero():
 
     assert np.isnan(scores.loc[scores["variant"] == "A0", "positive_recall"].iloc[0])
     assert scores.loc[scores["variant"] == "REAL", "positive_recall"].iloc[0] == 0.6
+
+
+def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
+    summary = pd.DataFrame(
+        [
+            {
+                "variant": "A0",
+                **{f"utility_mortality_{metric}": 0.60 for metric in UTILITY_SCORE_LABELS},
+                "mean_wasserstein_scaled": 0.40,
+                "detector_auc": 0.90,
+            },
+            {
+                "variant": "A1",
+                **{f"utility_mortality_{metric}": 0.65 for metric in UTILITY_SCORE_LABELS},
+                "mean_wasserstein_scaled": 0.30,
+                "detector_auc": 0.80,
+            },
+        ]
+    )
+    real_only = pd.DataFrame(
+        [{"utility_task": "mortality", **_metric_values(0.70)}]
+    )
+    tasks = [{"name": "mortality", "balance": "imbalanced"}]
+    utility = build_utility_heatmap_scores(summary, real_only, tasks)
+
+    tradeoff = build_utility_fidelity_tradeoff_scores(summary, utility, tasks)
+    utility_a1 = tradeoff[
+        (tradeoff["metric_key"] == "utility_mortality_positive_recall")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
+    wasserstein_a1 = tradeoff[
+        (tradeoff["metric_key"] == "fidelity_mean_wasserstein_scaled")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
+    detector_a1 = tradeoff[
+        (tradeoff["metric_key"] == "fidelity_detector_auc")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
+
+    assert np.isclose(utility_a1["improvement_delta"], -0.05)
+    assert utility_a1["reference"] == "REAL"
+    assert np.isclose(wasserstein_a1["improvement_delta"], 0.10)
+    assert np.isclose(detector_a1["improvement_delta"], 0.10)
+    assert wasserstein_a1["reference"] == "A0"
+    assert detector_a1["direction_rule"].startswith("a0_distance_to_ideal")
+
+    fidelity = build_fidelity_heatmap_scores(summary)
+    assert set(fidelity["metric"]) == {"mean_wasserstein_scaled", "detector_auc"}
+    assert set(FIDELITY_SCORE_SPECS).issuperset(fidelity["metric"])
+
+    paths = save_ablation_heatmap_artifacts(summary, real_only, tasks, tmp_path)
+    assert {path.name for path in paths} == {
+        "utility_heatmap_scores.csv",
+        "utility_heatmap.png",
+        "fidelity_heatmap_scores.csv",
+        "fidelity_heatmap.png",
+        "utility_fidelity_tradeoff_scores.csv",
+        "utility_fidelity_tradeoff_heatmap.png",
+    }
+    assert all(path.is_file() and path.stat().st_size > 0 for path in paths)
