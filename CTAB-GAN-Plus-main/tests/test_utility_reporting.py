@@ -80,7 +80,7 @@ def test_missing_utility_measurement_remains_missing_instead_of_zero():
     assert scores.loc[scores["variant"] == "REAL", "positive_recall"].iloc[0] == 0.6
 
 
-def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
+def test_tradeoff_directions_use_a0_for_every_domain(tmp_path):
     summary = pd.DataFrame(
         [
             {
@@ -137,8 +137,9 @@ def test_tradeoff_directions_use_real_for_utility_and_a0_for_fidelity(tmp_path):
         & (tradeoff["variant"] == "A1")
     ].iloc[0]
 
-    assert np.isclose(utility_a1["improvement_delta"], -0.05)
-    assert utility_a1["reference"] == "REAL"
+    assert np.isclose(utility_a1["improvement_delta"], 0.05)
+    assert utility_a1["reference"] == "A0"
+    assert utility_a1["direction_rule"] == "variant_minus_a0"
     assert np.isclose(wasserstein_a1["improvement_delta"], 0.10)
     assert np.isclose(detector_a1["improvement_delta"], 0.10)
     assert wasserstein_a1["reference"] == "A0"

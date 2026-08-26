@@ -36,10 +36,10 @@ for both mortality training regimes on a common absolute 0-1 scale.
 while coloring each metric from its best to worst variant. The privacy panel
 includes exact matches and synthetic-to-heldout nearest-neighbor distance
 ratios at p5, p50, and p95; ratio 1.0 means equal distance to the real training
-set. `utility_fidelity_privacy_tradeoff_heatmap.png` aligns directions before
-coloring: utility deltas use the real-only reference, fidelity and privacy-proxy
-deltas use A0, and detector AUC/average precision use movement toward the
-chance target of 0.5. Positive cells therefore always indicate an improvement.
+set. `utility_fidelity_privacy_tradeoff_heatmap.png` uses A0 as the common
+reference for utility, fidelity, and privacy-proxy deltas. Detector AUC and
+average precision use improvement in distance toward the chance target of 0.5.
+Positive cells therefore always indicate an improvement relative to A0.
 Exact raw values, references, direction rules, deltas, and per-metric
 normalized colors are retained in the corresponding CSV artifacts. These
 privacy metrics are memorization-risk proxies, not a formal privacy guarantee.

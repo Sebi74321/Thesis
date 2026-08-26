@@ -375,9 +375,11 @@ def build_utility_fidelity_privacy_tradeoff_scores(
     utility_scores: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
 ) -> pd.DataFrame:
-    """Align every delta so positive means improvement and normalize per metric."""
+    """Compare every available domain with A0 and align positive with improvement."""
     variants = _variant_order(summary["variant"].astype(str))
     indexed = summary.assign(variant=summary["variant"].astype(str)).set_index("variant")
+    if "A0" not in indexed.index:
+        raise ValueError("Combined trade-off normalization requires the A0 reference")
     rows: list[dict[str, Any]] = []
 
     for task in utility_tasks:
@@ -387,11 +389,11 @@ def build_utility_fidelity_privacy_tradeoff_scores(
         if task_scores.empty:
             continue
         task_indexed = task_scores.set_index("variant")
-        if "REAL" not in task_indexed.index:
+        if "A0" not in task_indexed.index:
             raise ValueError(f"Utility trade-off reference is missing for {task_name!r}")
         for metric, label in UTILITY_SCORE_LABELS.items():
             reference_value = pd.to_numeric(
-                task_indexed.loc["REAL", metric], errors="coerce"
+                task_indexed.loc["A0", metric], errors="coerce"
             )
             variant_values = pd.to_numeric(
                 task_indexed.reindex(variants)[metric], errors="coerce"
@@ -409,8 +411,8 @@ def build_utility_fidelity_privacy_tradeoff_scores(
                         "metric_key": metric_key,
                         "display_metric": f"Utility | {task_label} | {label}",
                         "variant": variant,
-                        "reference": "REAL",
-                        "direction_rule": "variant_minus_real",
+                        "reference": "A0",
+                        "direction_rule": "variant_minus_a0",
                         "ideal_value": 1.0,
                         "absolute_value": value,
                         "reference_value": reference_value,
@@ -418,8 +420,6 @@ def build_utility_fidelity_privacy_tradeoff_scores(
                     }
                 )
 
-    if "A0" not in indexed.index:
-        raise ValueError("Fidelity trade-off normalization requires the A0 reference")
     for metric, specification in FIDELITY_SCORE_SPECS.items():
         if metric not in indexed:
             continue
@@ -626,7 +626,7 @@ def save_fidelity_privacy_tradeoff_heatmap_artifacts(
         ax=axis,
     )
     axis.set_title(
-        "Utility vs real-only; fidelity/privacy proxy vs A0 (positive = improvement)"
+        "Utility, fidelity, and privacy proxy versus A0 (positive = improvement)"
     )
     axis.set_xlabel("Ablation variant")
     axis.set_ylabel("Measurement and reference")
