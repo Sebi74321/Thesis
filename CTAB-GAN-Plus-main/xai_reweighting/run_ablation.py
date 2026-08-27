@@ -979,8 +979,17 @@ def run_experiment(
     )
     atomic_write_csv(output_dir / "ablation_summary.csv", summary)
     atomic_write_csv(output_dir / "ablation_deltas.csv", delta_rows)
+    mixed_all = (
+        pd.concat(mixed_results, ignore_index=True)
+        if mixed_enabled and mixed_results
+        else None
+    )
     save_ablation_heatmap_artifacts(
-        summary, real_only_utility, utility_tasks, output_dir
+        summary,
+        real_only_utility,
+        utility_tasks,
+        output_dir,
+        mixture_results=mixed_all,
     )
     ranking_path = output_dir / "baseline_detector_feature_ranking.csv"
     if ranking_path.exists() and feature_details_by_variant:
@@ -990,8 +999,7 @@ def run_experiment(
                 pd.read_csv(ranking_path), feature_details_by_variant
             ),
         )
-    if mixed_enabled and mixed_results:
-        mixed_all = pd.concat(mixed_results, ignore_index=True)
+    if mixed_all is not None:
         atomic_write_csv(output_dir / "utility_mixture_results.csv", mixed_all)
         atomic_write_csv(
             output_dir / "utility_mixture_summary.csv",

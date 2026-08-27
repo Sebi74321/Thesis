@@ -45,19 +45,69 @@ def test_heatmap_scores_include_real_and_every_available_ablation_variant(tmp_pa
                 }
             )
     real_only = pd.DataFrame(real_rows)
+    mixture_rows = []
+    for task in tasks:
+        for position, variant in enumerate(variants):
+            for repeat in range(2):
+                mixture_rows.append(
+                    {
+                        "variant": variant,
+                        "utility_task": task["name"],
+                        "protocol": "additive",
+                        "synthetic_fraction": 1.0,
+                        "repeat": repeat,
+                        **_metric_values(0.80 + position / 100),
+                    }
+                )
+                # A replacement 50/50 row must not be selected for this view.
+                mixture_rows.append(
+                    {
+                        "variant": variant,
+                        "utility_task": task["name"],
+                        "protocol": "replacement",
+                        "synthetic_fraction": 0.5,
+                        "repeat": repeat,
+                        **_metric_values(0.20 + position / 100),
+                    }
+                )
+    mixture_results = pd.DataFrame(mixture_rows)
 
-    scores = build_utility_heatmap_scores(summary, real_only, tasks)
+    scores = build_utility_heatmap_scores(
+        summary, real_only, tasks, mixture_results
+    )
 
     for task in tasks:
         task_scores = scores[scores["utility_task"] == task["name"]]
-        assert task_scores["display_label"].tolist() == ["Real baseline", *variants]
+        expected = ["Real baseline"]
+        for variant in variants:
+            expected.extend(
+                [
+                    f"{variant} (100% synthetic)",
+                    f"{variant} (50% real / 50% synthetic)",
+                ]
+            )
+        assert task_scores["display_label"].tolist() == expected
         assert np.isclose(task_scores.iloc[0]["positive_precision"], 0.71)
         assert np.isclose(task_scores.iloc[0]["positive_recall"], 0.71)
         assert np.isclose(task_scores.iloc[0]["positive_f1"], 0.71)
-        assert np.isclose(task_scores.iloc[-1]["f1_macro"], 0.55)
+        a5_synthetic = task_scores[
+            (task_scores["variant"] == "A5")
+            & (task_scores["training_scenario"] == "synthetic_only")
+        ]
+        a5_mixed = task_scores[
+            (task_scores["variant"] == "A5")
+            & (task_scores["training_scenario"] == "additive_1_0")
+        ]
+        assert np.isclose(a5_synthetic["f1_macro"].iloc[0], 0.55)
+        assert np.isclose(a5_mixed["f1_macro"].iloc[0], 0.85)
+        assert a5_mixed["protocol"].iloc[0] == "additive"
+        assert np.isclose(a5_mixed["synthetic_fraction"].iloc[0], 1.0)
+        assert np.isclose(
+            a5_mixed["synthetic_share_of_training"].iloc[0], 0.5
+        )
 
     table_path, image_path = save_utility_heatmap_artifacts(
-        summary, real_only, tasks, tmp_path
+        summary, real_only, tasks, tmp_path, mixture_results
     )
     assert table_path.is_file()
     assert image_path.is_file()
@@ -113,11 +163,36 @@ def test_tradeoff_directions_use_a0_for_every_domain(tmp_path):
         [{"utility_task": "mortality", **_metric_values(0.70)}]
     )
     tasks = [{"name": "mortality", "balance": "imbalanced"}]
-    utility = build_utility_heatmap_scores(summary, real_only, tasks)
+    mixture = pd.DataFrame(
+        [
+            {
+                "variant": "A0",
+                "utility_task": "mortality",
+                "protocol": "additive",
+                "synthetic_fraction": 1.0,
+                **_metric_values(0.70),
+            },
+            {
+                "variant": "A1",
+                "utility_task": "mortality",
+                "protocol": "additive",
+                "synthetic_fraction": 1.0,
+                **_metric_values(0.78),
+            },
+        ]
+    )
+    utility = build_utility_heatmap_scores(summary, real_only, tasks, mixture)
 
     tradeoff = build_utility_fidelity_privacy_tradeoff_scores(summary, utility, tasks)
     utility_a1 = tradeoff[
         (tradeoff["metric_key"] == "utility_mortality_positive_recall")
+        & (tradeoff["variant"] == "A1")
+    ].iloc[0]
+    mixed_utility_a1 = tradeoff[
+        (
+            tradeoff["metric_key"]
+            == "utility_mortality_positive_recall_additive_1_0"
+        )
         & (tradeoff["variant"] == "A1")
     ].iloc[0]
     wasserstein_a1 = tradeoff[
@@ -140,6 +215,13 @@ def test_tradeoff_directions_use_a0_for_every_domain(tmp_path):
     assert np.isclose(utility_a1["improvement_delta"], 0.05)
     assert utility_a1["reference"] == "A0"
     assert utility_a1["direction_rule"] == "variant_minus_a0"
+    assert np.isclose(mixed_utility_a1["improvement_delta"], 0.08)
+    assert mixed_utility_a1["reference"] == "A0"
+    assert mixed_utility_a1["utility_training_scenario"] == "additive_1_0"
+    assert (
+        mixed_utility_a1["direction_rule"]
+        == "variant_minus_a0_same_training_scenario"
+    )
     assert np.isclose(wasserstein_a1["improvement_delta"], 0.10)
     assert np.isclose(detector_a1["improvement_delta"], 0.10)
     assert wasserstein_a1["reference"] == "A0"

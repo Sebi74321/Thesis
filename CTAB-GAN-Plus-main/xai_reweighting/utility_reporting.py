@@ -156,8 +156,9 @@ def build_utility_heatmap_scores(
     summary: pd.DataFrame,
     real_only: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
+    mixture_results: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Combine real-only and synthetic-training utility on one absolute scale."""
+    """Combine real-only, synthetic-only, and additive-1.0 utility."""
     if "variant" not in summary:
         raise ValueError("Ablation summary must contain a variant column")
     if "utility_task" not in real_only:
@@ -178,6 +179,10 @@ def build_utility_heatmap_scores(
                 "utility_task": task_name,
                 "target_balance": balance,
                 "training_source": "real",
+                "training_scenario": "real_only",
+                "protocol": "real_only",
+                "synthetic_fraction": 0.0,
+                "synthetic_share_of_training": 0.0,
                 "variant": "REAL",
                 "display_label": "Real baseline",
                 **{
@@ -189,6 +194,24 @@ def build_utility_heatmap_scores(
             }
         )
 
+        mixture_task = pd.DataFrame()
+        if mixture_results is not None and not mixture_results.empty:
+            required = {"variant", "utility_task", "protocol", "synthetic_fraction"}
+            missing = sorted(required - set(mixture_results.columns))
+            if missing:
+                raise ValueError(
+                    "Mixed utility results are missing heatmap columns: "
+                    + ", ".join(missing)
+                )
+            fractions = pd.to_numeric(
+                mixture_results["synthetic_fraction"], errors="coerce"
+            )
+            mixture_task = mixture_results[
+                (mixture_results["utility_task"].astype(str) == task_name)
+                & (mixture_results["protocol"].astype(str) == "additive")
+                & np.isclose(fractions, 1.0)
+            ]
+
         for variant in variants:
             result = indexed.loc[variant]
             if isinstance(result, pd.DataFrame):
@@ -198,8 +221,12 @@ def build_utility_heatmap_scores(
                     "utility_task": task_name,
                     "target_balance": balance,
                     "training_source": "synthetic",
+                    "training_scenario": "synthetic_only",
+                    "protocol": "synthetic_only",
+                    "synthetic_fraction": 1.0,
+                    "synthetic_share_of_training": 1.0,
                     "variant": variant,
-                    "display_label": variant,
+                    "display_label": f"{variant} (100% synthetic)",
                     **{
                         metric: pd.to_numeric(
                             result.get(f"utility_{task_name}_{metric}", np.nan),
@@ -209,11 +236,45 @@ def build_utility_heatmap_scores(
                     },
                 }
             )
+            mixture_variant = mixture_task[
+                mixture_task["variant"].astype(str) == variant
+            ]
+            if not mixture_variant.empty:
+                numeric_mixture = mixture_variant.select_dtypes(
+                    include=[np.number]
+                ).mean()
+                rows.append(
+                    {
+                        "utility_task": task_name,
+                        "target_balance": balance,
+                        "training_source": "mixed",
+                        "training_scenario": "additive_1_0",
+                        "protocol": "additive",
+                        "synthetic_fraction": 1.0,
+                        "synthetic_share_of_training": float(
+                            numeric_mixture.get(
+                                "synthetic_share_of_training", 0.5
+                            )
+                        ),
+                        "variant": variant,
+                        "display_label": f"{variant} (50% real / 50% synthetic)",
+                        **{
+                            metric: float(numeric_mixture[metric])
+                            if metric in numeric_mixture
+                            else np.nan
+                            for metric in UTILITY_SCORE_LABELS
+                        },
+                    }
+                )
 
     columns = [
         "utility_task",
         "target_balance",
         "training_source",
+        "training_scenario",
+        "protocol",
+        "synthetic_fraction",
+        "synthetic_share_of_training",
         "variant",
         "display_label",
         *UTILITY_SCORE_LABELS,
@@ -226,9 +287,12 @@ def save_utility_heatmap_artifacts(
     real_only: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
     output_dir: Path,
+    mixture_results: pd.DataFrame | None = None,
 ) -> tuple[Path, Path]:
     """Atomically save the heatmap's exact values and rendered PNG."""
-    scores = build_utility_heatmap_scores(summary, real_only, utility_tasks)
+    scores = build_utility_heatmap_scores(
+        summary, real_only, utility_tasks, mixture_results
+    )
     if scores.empty:
         raise ValueError("No utility scores are available for the heatmap")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -269,7 +333,7 @@ def save_utility_heatmap_artifacts(
         axis.tick_params(axis="x", rotation=35)
         axis.tick_params(axis="y", rotation=0)
     figure.suptitle(
-        "Real-only and ablation-variant utility scores",
+        "Real-only, synthetic-only, and additive-1.0 (50/50) utility scores",
         fontsize=16,
         y=1.01,
     )
@@ -388,37 +452,64 @@ def build_utility_fidelity_privacy_tradeoff_scores(
         task_scores = utility_scores[utility_scores["utility_task"] == task_name]
         if task_scores.empty:
             continue
-        task_indexed = task_scores.set_index("variant")
-        if "A0" not in task_indexed.index:
-            raise ValueError(f"Utility trade-off reference is missing for {task_name!r}")
-        for metric, label in UTILITY_SCORE_LABELS.items():
-            reference_value = pd.to_numeric(
-                task_indexed.loc["A0", metric], errors="coerce"
-            )
-            variant_values = pd.to_numeric(
-                task_indexed.reindex(variants)[metric], errors="coerce"
-            )
-            if not np.isfinite(reference_value) or not variant_values.notna().any():
-                continue
-            metric_key = f"utility_{task_name}_{metric}"
-            for variant in variants:
-                value = variant_values.loc[variant]
-                rows.append(
-                    {
-                        "domain": "utility",
-                        "utility_task": task_name,
-                        "metric": metric,
-                        "metric_key": metric_key,
-                        "display_metric": f"Utility | {task_label} | {label}",
-                        "variant": variant,
-                        "reference": "A0",
-                        "direction_rule": "variant_minus_a0",
-                        "ideal_value": 1.0,
-                        "absolute_value": value,
-                        "reference_value": reference_value,
-                        "improvement_delta": value - reference_value,
-                    }
+        if "training_scenario" not in task_scores:
+            task_scores = task_scores.assign(training_scenario="synthetic_only")
+        scenarios = [
+            scenario
+            for scenario in ["synthetic_only", "additive_1_0"]
+            if scenario in set(task_scores["training_scenario"].astype(str))
+        ]
+        for scenario in scenarios:
+            scenario_scores = task_scores[
+                task_scores["training_scenario"].astype(str) == scenario
+            ]
+            task_indexed = scenario_scores.set_index("variant")
+            if "A0" not in task_indexed.index:
+                raise ValueError(
+                    f"Utility trade-off reference is missing for {task_name!r} "
+                    f"under {scenario!r}"
                 )
+            scenario_label = (
+                "100% synthetic"
+                if scenario == "synthetic_only"
+                else "Additive 1.0 (50% real / 50% synthetic)"
+            )
+            metric_suffix = "" if scenario == "synthetic_only" else "_additive_1_0"
+            for metric, label in UTILITY_SCORE_LABELS.items():
+                reference_value = pd.to_numeric(
+                    task_indexed.loc["A0", metric], errors="coerce"
+                )
+                variant_values = pd.to_numeric(
+                    task_indexed.reindex(variants)[metric], errors="coerce"
+                )
+                if not np.isfinite(reference_value) or not variant_values.notna().any():
+                    continue
+                metric_key = f"utility_{task_name}_{metric}{metric_suffix}"
+                for variant in variants:
+                    value = variant_values.loc[variant]
+                    rows.append(
+                        {
+                            "domain": "utility",
+                            "utility_task": task_name,
+                            "utility_training_scenario": scenario,
+                            "metric": metric,
+                            "metric_key": metric_key,
+                            "display_metric": (
+                                f"Utility | {task_label} | {scenario_label} | {label}"
+                            ),
+                            "variant": variant,
+                            "reference": "A0",
+                            "direction_rule": (
+                                "variant_minus_a0"
+                                if scenario == "synthetic_only"
+                                else "variant_minus_a0_same_training_scenario"
+                            ),
+                            "ideal_value": 1.0,
+                            "absolute_value": value,
+                            "reference_value": reference_value,
+                            "improvement_delta": value - reference_value,
+                        }
+                    )
 
     for metric, specification in FIDELITY_SCORE_SPECS.items():
         if metric not in indexed:
@@ -649,11 +740,12 @@ def save_ablation_heatmap_artifacts(
     real_only: pd.DataFrame,
     utility_tasks: Iterable[Mapping[str, Any]],
     output_dir: Path,
+    mixture_results: pd.DataFrame | None = None,
 ) -> list[Path]:
     """Save all absolute and direction-aware ablation heatmaps."""
     utility_tasks = list(utility_tasks)
     utility_table, utility_image = save_utility_heatmap_artifacts(
-        summary, real_only, utility_tasks, output_dir
+        summary, real_only, utility_tasks, output_dir, mixture_results
     )
     utility_scores = pd.read_csv(utility_table)
     fidelity_paths = save_fidelity_privacy_tradeoff_heatmap_artifacts(

@@ -277,7 +277,17 @@ def run_existing_evaluation(
         )
         atomic_write_csv(run_dir / "ablation_summary.csv", summary)
         atomic_write_csv(run_dir / "ablation_deltas.csv", deltas)
-        save_ablation_heatmap_artifacts(summary, real_only, utility_tasks, run_dir)
+        mixture_path = run_dir / "utility_mixture_results.csv"
+        mixture_results = (
+            pd.read_csv(mixture_path) if mixture_path.is_file() else None
+        )
+        save_ablation_heatmap_artifacts(
+            summary,
+            real_only,
+            utility_tasks,
+            run_dir,
+            mixture_results=mixture_results,
+        )
 
         if run_diagnostics:
             report("Recomputing detector, priority, and feature-exclusion diagnostics")

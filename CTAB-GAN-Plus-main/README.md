@@ -28,9 +28,14 @@ counterfactual unadjusted mixture rate, and the applied prevalence adjustment.
 
 Each ablation run also writes `utility_heatmap_scores.csv` and
 `utility_heatmap.png`. The heatmap places the real-only reference above every
-completed A0-A5 variant and reports ROC-AUC, PR-AUC, accuracy, balanced
+completed A0-A5 variant. Each variant has a synthetic-only row and, when mixed
+utility is enabled, an additive-fraction-1.0 row containing all real training
+rows plus an equally sized synthetic sample (50% real / 50% synthetic in the
+final training set). The heatmap reports ROC-AUC, PR-AUC, accuracy, balanced
 accuracy, macro precision/recall/F1, and positive-class precision/recall/F1
-for both mortality training regimes on a common absolute 0-1 scale.
+for both mortality training regimes on a common absolute 0-1 scale. These
+additive-1.0 utility values are also included in the combined trade-off map and
+each variant is compared with A0 under the same training composition.
 
 `fidelity_heatmap.png` and `privacy_proxy_heatmap.png` annotate absolute values
 while coloring each metric from its best to worst variant. The privacy panel
