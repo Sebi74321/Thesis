@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from importlib import metadata as importlib_metadata
 import json
 import os
 import re
+import shutil
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -44,6 +46,87 @@ from .utility_reporting import save_ablation_heatmap_artifacts
 
 VALID_VARIANTS = ("A0", "A1", "A2", "A3", "A4", "A5")
 VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
+
+
+def _dp_transformer_context(
+    train: pd.DataFrame,
+    train_indices: Iterable[int],
+    categorical_columns: Iterable[str],
+    source_data_sha256: str,
+) -> Dict[str, Any]:
+    """Describe everything that makes a fitted DP-CGAN transformer reusable."""
+    serialized_indices = json.dumps(
+        [int(index) for index in train_indices], separators=(",", ":")
+    ).encode("utf-8")
+    try:
+        package_version = importlib_metadata.version("dp-cgans")
+    except importlib_metadata.PackageNotFoundError:
+        package_version = "unavailable"
+    return {
+        "source_data_sha256": str(source_data_sha256),
+        "train_indices_sha256": hashlib.sha256(serialized_indices).hexdigest(),
+        "training_rows": int(len(train)),
+        "columns": [str(column) for column in train.columns],
+        "dtypes": {str(column): str(dtype) for column, dtype in train.dtypes.items()},
+        "categorical_columns": [str(column) for column in categorical_columns],
+        "dp_cgans_version": package_version,
+    }
+
+
+def _atomic_copy_file(source: Path, destination: Path) -> None:
+    """Copy a binary artifact without exposing a partial destination file."""
+    if not source.is_file():
+        raise FileNotFoundError(f"Required source artifact does not exist: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(
+        prefix=destination.name, suffix=".tmp", dir=destination.parent
+    )
+    os.close(fd)
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _freeze_or_validate_dp_transformer(
+    source: Path,
+    frozen: Path,
+    manifest_path: Path,
+    context: Dict[str, Any],
+) -> Path:
+    """Create once, then strictly validate, the run-scoped A0 transformer."""
+    if frozen.is_file() or manifest_path.is_file():
+        if not frozen.is_file() or not manifest_path.is_file():
+            raise RuntimeError(
+                "DP-CGAN transformer cache is incomplete; both the transformer "
+                "and compatibility manifest are required"
+            )
+        stored = json.loads(manifest_path.read_text(encoding="utf-8"))
+        stored_context = stored.get("compatibility")
+        if stored_context != context:
+            raise ValueError(
+                "DP-CGAN transformer compatibility mismatch: dataset split, schema, "
+                "categorical columns, or package version changed"
+            )
+        actual_hash = file_sha256(frozen)
+        if stored.get("transformer_sha256") != actual_hash:
+            raise ValueError("Frozen DP-CGAN transformer hash does not match its manifest")
+        return frozen.resolve()
+
+    _atomic_copy_file(source, frozen)
+    atomic_write_json(
+        manifest_path,
+        {
+            "source_variant": "A0",
+            "reuse_scope": "A1-A5_within_this_ablation_run",
+            "compatibility": context,
+            "transformer_sha256": file_sha256(frozen),
+            "transformer_path": str(frozen.resolve()),
+        },
+    )
+    return frozen.resolve()
 
 
 def _numeric_metric_delta(current: Dict[str, Any], reference: Dict[str, Any]) -> Dict[str, float]:
@@ -162,6 +245,19 @@ def _load_config(path: Path) -> Dict[str, Any]:
         )
     if generator_name == "dp_cgan" and config["generator"].get("private", False) is not False:
         raise ValueError("dp_cgan is a non-private baseline; set generator.private=false")
+    if generator_name == "dp_cgan":
+        reuse_transformer = config["generator"].get(
+            "reuse_transformer_across_variants", False
+        )
+        if not isinstance(reuse_transformer, bool):
+            raise ValueError(
+                "generator.reuse_transformer_across_variants must be true or false"
+            )
+        if reuse_transformer and config["generator"].get("saved_transformer"):
+            raise ValueError(
+                "Ablation-managed transformer reuse requires saved_transformer=null; "
+                "A0 must fit the frozen transformer from real_train"
+            )
     config["generator_name"] = generator_name
     config["generator"].setdefault(
         "categorical_columns", list(config["categorical_cols"])
@@ -337,6 +433,18 @@ def _save_training_artifacts(
     if generator_name == "dp_cgan":
         diagnostics["differential_privacy_enabled"] = False
         diagnostics["backend_mode"] = "non_private_baseline"
+        diagnostics["transformer_reused"] = bool(
+            getattr(model, "transformer_reused", False)
+        )
+        reused_path = getattr(model, "saved_transformer_path", None)
+        diagnostics["saved_transformer"] = (
+            str(reused_path) if reused_path is not None else None
+        )
+        diagnostics["saved_transformer_sha256"] = (
+            file_sha256(Path(reused_path))
+            if reused_path is not None and Path(reused_path).is_file()
+            else None
+        )
     if training_rows is not None:
         diagnostics["training_rows"] = int(training_rows)
     settings = generator_config or {}
@@ -737,6 +845,12 @@ def run_experiment(
         "smoke": smoke,
         "progress": progress,
         "generator_name": generator_name,
+        "dp_cgan_transformer_reuse": bool(
+            generator_name == "dp_cgan"
+            and config["generator"].get(
+                "reuse_transformer_across_variants", False
+            )
+        ),
         **runtime_manifest,
     }
     atomic_write_json(manifest_path, manifest)
@@ -758,17 +872,44 @@ def run_experiment(
     splits = create_data_splits(data, config["target_col"], seed=seed, **split_cfg)
     atomic_write_json(output_dir / "split_indices.json", splits.indices)
     real_eval = splits.val if stage == "val" else splits.test
+    reuse_dp_transformer = bool(
+        adapter_factory is None
+        and generator_name == "dp_cgan"
+        and config["generator"].get("reuse_transformer_across_variants", False)
+    )
+    frozen_dp_transformer = (
+        output_dir / "backend_work" / "shared" / "fitted_transformer_A0.pkl"
+    )
+    dp_transformer_manifest = output_dir / "dp_cgan_transformer_manifest.json"
+    dp_transformer_context = _dp_transformer_context(
+        splits.train,
+        splits.indices["train"],
+        config["generator"]["categorical_columns"],
+        data_hash,
+    )
     if adapter_factory is None:
-        make_adapter = lambda variant: _adapter(
-            config,
-            device,
-            seed,
-            progress,
-            f"{generator_name} {variant} GAN training",
-            output_dir / "backend_work" / variant,
-        )
+        def make_adapter(variant):
+            variant_config = json.loads(json.dumps(config))
+            if reuse_dp_transformer and variant != "A0":
+                if not frozen_dp_transformer.is_file():
+                    raise FileNotFoundError(
+                        "The frozen A0 DP-CGAN transformer is unavailable; A0 must "
+                        "complete before a weighted variant can start"
+                    )
+                variant_config["generator"]["saved_transformer"] = str(
+                    frozen_dp_transformer.resolve()
+                )
+            return _adapter(
+                variant_config,
+                device,
+                seed,
+                progress,
+                f"{generator_name} {variant} GAN training",
+                output_dir / "backend_work" / variant,
+            )
     else:
-        make_adapter = lambda variant: adapter_factory()
+        def make_adapter(variant):
+            return adapter_factory()
 
     baseline_audit_path = output_dir / "baseline_synthetic_audit.csv"
     baseline_eval_path = output_dir / "synthetic_A0.csv"
@@ -821,6 +962,14 @@ def run_experiment(
             config,
             generator_name,
             seed,
+        )
+
+    if reuse_dp_transformer:
+        _freeze_or_validate_dp_transformer(
+            output_dir / "backend_work" / "A0" / "fitted_transformer.pkl",
+            frozen_dp_transformer,
+            dp_transformer_manifest,
+            dp_transformer_context,
         )
 
     detector_cfg = config.get("detector", {})
@@ -1239,6 +1388,11 @@ def run_experiment(
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "elapsed_seconds": time.time() - started,
             "variants_completed": variants,
+            "dp_cgan_transformer_manifest": (
+                "dp_cgan_transformer_manifest.json"
+                if dp_transformer_manifest.is_file()
+                else None
+            ),
             "discriminator_shap_variants": [
                 variant
                 for variant in variants

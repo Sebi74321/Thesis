@@ -10,7 +10,9 @@ from xai_reweighting.run_ablation import (
     VALID_VARIANTS,
     _adapter,
     _build_controlled_deltas,
+    _dp_transformer_context,
     _fit_and_save_training,
+    _freeze_or_validate_dp_transformer,
     build_parser,
     run_experiment,
 )
@@ -25,6 +27,59 @@ class FakeGenerator:
 
     def save_checkpoint(self, path):
         path.write_text("fake checkpoint", encoding="utf-8")
+
+
+def test_dp_transformer_is_frozen_atomically_and_strictly_validated(tmp_path):
+    training = pd.DataFrame(
+        {"value": [1.0, 2.0, 3.0], "target": pd.Series([0, 1, 0], dtype="int64")}
+    )
+    context = _dp_transformer_context(
+        training,
+        train_indices=[0, 2, 4],
+        categorical_columns=["target"],
+        source_data_sha256="source-hash",
+    )
+    source = tmp_path / "A0" / "fitted_transformer.pkl"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"A0 fitted transformer")
+    frozen = tmp_path / "shared" / "fitted_transformer_A0.pkl"
+    manifest = tmp_path / "transformer_manifest.json"
+
+    result = _freeze_or_validate_dp_transformer(
+        source, frozen, manifest, context
+    )
+
+    assert result == frozen.resolve()
+    assert frozen.read_bytes() == b"A0 fitted transformer"
+    stored = json.loads(manifest.read_text(encoding="utf-8"))
+    assert stored["compatibility"] == context
+    assert stored["source_variant"] == "A0"
+    assert _freeze_or_validate_dp_transformer(
+        source, frozen, manifest, context
+    ) == frozen.resolve()
+
+    incompatible = dict(context, source_data_sha256="changed")
+    with pytest.raises(ValueError, match="compatibility mismatch"):
+        _freeze_or_validate_dp_transformer(
+            source, frozen, manifest, incompatible
+        )
+
+
+def test_dp_transformer_cache_detects_artifact_corruption(tmp_path):
+    training = pd.DataFrame({"value": [1.0, 2.0], "target": [0, 1]})
+    context = _dp_transformer_context(
+        training, [0, 1], ["target"], "source-hash"
+    )
+    source = tmp_path / "A0" / "fitted_transformer.pkl"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"valid")
+    frozen = tmp_path / "shared" / "fitted_transformer_A0.pkl"
+    manifest = tmp_path / "transformer_manifest.json"
+    _freeze_or_validate_dp_transformer(source, frozen, manifest, context)
+    frozen.write_bytes(b"corrupt")
+
+    with pytest.raises(ValueError, match="hash does not match"):
+        _freeze_or_validate_dp_transformer(source, frozen, manifest, context)
 
 
 def test_progress_cli_modes():
@@ -80,6 +135,9 @@ def test_dp_weighted_fit_saves_non_private_checkpoint_without_accounting(tmp_pat
     assert (tmp_path / "model_checkpoint_A5.pkl").exists()
     assert diagnostics["differential_privacy_enabled"] is False
     assert diagnostics["backend_mode"] == "non_private_baseline"
+    assert diagnostics["transformer_reused"] is False
+    assert diagnostics["saved_transformer"] is None
+    assert diagnostics["saved_transformer_sha256"] is None
     assert not (tmp_path / "privacy_accounting_A5.json").exists()
 
 

@@ -115,6 +115,39 @@ def test_dp_adapter_rejects_private_mode(tmp_path):
         )
 
 
+def test_dp_adapter_requires_and_forwards_existing_saved_transformer(
+    fake_backends, tmp_path
+):
+    transformer = tmp_path / "shared" / "fitted_transformer.pkl"
+    transformer.parent.mkdir(parents=True)
+    transformer.write_bytes(b"fitted transformer")
+
+    adapter = DPCGANAdapter(
+        categorical_columns=["target"],
+        private=False,
+        batch_size=10,
+        pac=10,
+        epochs=1,
+        saved_transformer=transformer,
+        work_dir=tmp_path / "variant",
+        progress="off",
+    )
+
+    assert adapter.transformer_reused is True
+    assert adapter.saved_transformer_path == transformer.resolve()
+    adapter.fit(pd.DataFrame({"x": range(10), "target": [0, 1] * 5}))
+    assert FakeDPCGAN.last_kwargs["saved_transformer"] == str(transformer.resolve())
+
+    with pytest.raises(FileNotFoundError, match="transformer does not exist"):
+        DPCGANAdapter(
+            categorical_columns=["target"],
+            private=False,
+            batch_size=10,
+            pac=10,
+            saved_transformer=tmp_path / "missing.pkl",
+        )
+
+
 def test_registry_validates_model_name():
     with pytest.raises(ValueError, match="Unknown generator"):
         create_generator("unknown", {}, device=torch.device("cpu"), seed=42)

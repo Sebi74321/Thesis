@@ -15,6 +15,7 @@
     "epochs": 150,
     "pac": 10,
     "private": false,
-    "saved_transformer": null
+    "saved_transformer": null,
+    "reuse_transformer_across_variants": true
   }
 }

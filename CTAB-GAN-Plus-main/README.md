@@ -147,7 +147,16 @@ python -m xai_reweighting.run_ablation --config configs/wids_dpcgan.json  --stag
 
 Each variant trains a fresh instance in an isolated backend directory and
 saves a model-specific checkpoint, loss history, convergence warnings, and
-environment/configuration metadata. The `dp_cgan` backend always uses
+environment/configuration metadata. In weighted `dp_cgan` runs, A0 fits the
+data transformer from `real_train` once. The runner freezes and hashes that
+transformer, validates its dataset split, schema, categorical columns, and
+package version, and reuses it for A1-A5. Every variant still transforms its
+own augmented rows, rebuilds its data sampler, and trains a fresh GAN. The
+reuse decision and artifact hash are recorded in
+`dp_cgan_transformer_manifest.json`; RQ1 model-comparison runs continue to fit
+their transformers independently.
+
+The `dp_cgan` backend always uses
 `private=false`; no noise multiplier, delta, epsilon, clipping, or privacy
 accounting is applied or reported. It is therefore a comparison of the
 DP-CGANS package's generator architecture, not a differentially private model

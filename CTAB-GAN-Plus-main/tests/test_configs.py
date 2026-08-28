@@ -123,6 +123,8 @@ def test_weighted_multigan_configs_inherit_dataset_protocol(
     if generator_name == "dp_cgan":
         assert config["generator"]["private"] is False
         assert config["generator"]["discriminator_steps"] == 10
+        assert config["generator"]["saved_transformer"] is None
+        assert config["generator"]["reuse_transformer_across_variants"] is True
 
 
 def test_all_weighted_configs_use_the_same_reweighting_protocol():

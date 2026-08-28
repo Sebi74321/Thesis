@@ -477,6 +477,20 @@ class DPCGANAdapter(GeneratorAdapter):
         self.progress = progress
         self.progress_label = progress_label
         self.work_dir = Path(work_dir or f"dp_cgan_seed_{seed}").resolve()
+        self.saved_transformer_path = (
+            Path(saved_transformer).expanduser().resolve()
+            if saved_transformer is not None
+            else None
+        )
+        if (
+            self.saved_transformer_path is not None
+            and not self.saved_transformer_path.is_file()
+        ):
+            raise FileNotFoundError(
+                "Configured DP-CGAN transformer does not exist: "
+                f"{self.saved_transformer_path}"
+            )
+        self.transformer_reused = self.saved_transformer_path is not None
         self.model_kwargs = {
             "generator_dim": tuple(generator_dim),
             "discriminator_dim": tuple(discriminator_dim),
@@ -489,7 +503,11 @@ class DPCGANAdapter(GeneratorAdapter):
             "epochs": int(epochs),
             "pac": int(pac),
             "private": False,
-            "saved_transformer": saved_transformer,
+            "saved_transformer": (
+                str(self.saved_transformer_path)
+                if self.saved_transformer_path is not None
+                else None
+            ),
             "cuda": str(self.device) if self.device.type == "cuda" else False,
         }
         self.columns = None
