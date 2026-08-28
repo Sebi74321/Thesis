@@ -75,6 +75,11 @@ from the variant's final generator. The trajectory therefore measures how each
 historical critic responds to a common final-generator probe; it is not an
 epoch-matched generator/discriminator comparison.
 
+Use `notebooks/discriminator_snapshot_analysis.ipynb` to inspect snapshot
+performance and classification outcomes, follow feature-attribution trajectories,
+and compare internal-discriminator GradientSHAP with the post-hoc detector's
+TreeSHAP ranking.
+
 CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
 from the fitted training rows. Raw pre-restoration samples are saved as
 `synthetic_raw_<variant>.csv`; authoritative samples retain the usual
