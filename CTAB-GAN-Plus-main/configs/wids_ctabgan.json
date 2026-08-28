@@ -78,8 +78,9 @@
   },
   "detector": {
     "n_estimators": 300,
-    "shap_max_rows": 2000,
-    "shap_scope": "misclassified_holdout_only"
+    "shap_max_rows": 100,
+    "shap_scope": "correct_synthetic_holdout_only",
+    "test_size": 0.3
   },
   "baseline_diagnostics": {
     "enabled": true,

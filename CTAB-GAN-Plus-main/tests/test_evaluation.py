@@ -68,7 +68,7 @@ def test_detector_accepts_equivalent_mixed_categorical_dtypes():
     assert 0.0 <= result.metrics["detector_auc"] <= 1.0
 
 
-def test_detector_shap_uses_only_misclassified_holdout_rows(monkeypatch):
+def test_detector_shap_uses_only_correctly_classified_synthetic_rows(monkeypatch):
     real = pd.DataFrame({"x": np.arange(100, 120, dtype=float)})
     synthetic = pd.DataFrame({"x": np.arange(20, dtype=float)})
     explained = []
@@ -111,13 +111,20 @@ def test_detector_shap_uses_only_misclassified_holdout_rows(monkeypatch):
     )
 
     assert result.metrics["detector_misclassified_rows"] == 10
+    assert result.metrics["detector_correct_synthetic"] == 10
     assert result.metrics["detector_shap_candidate_rows"] == 10
     assert result.metrics["detector_shap_rows"] == 3
-    assert result.metrics["detector_shap_scope"] == "misclassified_holdout_only"
-    assert result.metrics["detector_shap_status"] == "misclassified_holdout_rows_explained"
+    assert (
+        result.metrics["detector_shap_scope"]
+        == "correct_synthetic_holdout_only"
+    )
+    assert (
+        result.metrics["detector_shap_status"]
+        == "correct_synthetic_holdout_rows_explained"
+    )
     assert len(explained) == 1
     assert len(explained[0]) == 3
-    assert (explained[0][:, 0] >= 100).all()
+    assert (explained[0][:, 0] < 20).all()
 
 
 def test_categorical_shap_is_grouped_before_taking_absolute_mean():

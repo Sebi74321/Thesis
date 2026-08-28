@@ -46,7 +46,12 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert weighting["correlation_threshold"] == 0.65
     assert "max_per_correlation_group" not in weighting
     assert config["feature_exclusion_sensitivity"]["enabled"] is True
-    assert config["detector"]["shap_scope"] == "misclassified_holdout_only"
+    assert (
+        config["detector"]["shap_scope"]
+        == "correct_synthetic_holdout_only"
+    )
+    assert config["detector"]["shap_max_rows"] == 100
+    assert config["detector"]["test_size"] == 0.3
 
 
 def test_mimic_age_is_general_and_integer():
@@ -63,7 +68,8 @@ def test_mimic_age_is_general_and_integer():
         "enabled": True,
         "background_size": 50,
         "explain_size": 100,
-        "exclude_target": True,
+        "condition_samples": 8,
+        "exclude_target": False,
     }
 
 

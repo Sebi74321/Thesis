@@ -18,6 +18,15 @@ from sklearn.preprocessing import OneHotEncoder
 from .scoring import normalize_signal
 
 
+PRIMARY_SHAP_SCOPE = "correct_synthetic_holdout_only"
+OUTCOME_GROUPS = (
+    "correct_real",
+    "false_real_as_synthetic",
+    "correct_synthetic",
+    "false_synthetic_as_real",
+)
+
+
 def _one_hot_encoder():
     try:
         return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
@@ -29,6 +38,64 @@ def _one_hot_encoder():
 class DetectorResult:
     metrics: Dict[str, Any]
     shap_importance: pd.Series
+    shap_signed: pd.Series
+
+
+def prepare_detector_probe(
+    real_df: pd.DataFrame,
+    synthetic_df: pd.DataFrame,
+    *,
+    seed: int,
+    test_size: float,
+) -> tuple[list[str], pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
+    """Create the deterministic balanced probe shared by both discriminators."""
+    common = [column for column in real_df.columns if column in synthetic_df.columns]
+    if not common:
+        raise ValueError("Real and synthetic data have no common columns")
+    n = min(len(real_df), len(synthetic_df))
+    if n < 4:
+        raise ValueError("At least four real and synthetic rows are required")
+    real = real_df.loc[:, common].sample(n=n, random_state=seed).copy()
+    synthetic = synthetic_df.loc[:, common].sample(n=n, random_state=seed).copy()
+    combined = pd.concat([real, synthetic], ignore_index=True)
+    truth = np.concatenate(
+        [np.ones(n, dtype=int), np.zeros(n, dtype=int)]
+    )
+    indices = np.arange(len(combined), dtype=int)
+    calibration_indices, holdout_indices = train_test_split(
+        indices,
+        test_size=test_size,
+        random_state=seed,
+        stratify=truth,
+    )
+    return common, combined, truth, calibration_indices, holdout_indices
+
+
+def outcome_group_masks(
+    truth: np.ndarray, predictions: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Return the four real/synthetic classification outcome masks."""
+    truth = np.asarray(truth, dtype=int)
+    predictions = np.asarray(predictions, dtype=int)
+    if truth.shape != predictions.shape:
+        raise ValueError("Truth and prediction arrays must have identical shapes")
+    return {
+        "correct_real": (truth == 1) & (predictions == 1),
+        "false_real_as_synthetic": (truth == 1) & (predictions == 0),
+        "correct_synthetic": (truth == 0) & (predictions == 0),
+        "false_synthetic_as_real": (truth == 0) & (predictions == 1),
+    }
+
+
+def deterministic_row_subset(
+    indices: np.ndarray, maximum: int, seed: int
+) -> np.ndarray:
+    """Select a reproducible sorted subset without changing global RNG state."""
+    indices = np.asarray(indices, dtype=int)
+    if len(indices) <= maximum:
+        return np.sort(indices)
+    rng = np.random.default_rng(int(seed))
+    return np.sort(rng.choice(indices, int(maximum), replace=False))
 
 
 def _aggregate_encoded_shap(
@@ -38,6 +105,19 @@ def _aggregate_encoded_shap(
     category_sizes: Iterable[int],
 ) -> pd.Series:
     """Aggregate signed encoded SHAP contributions before measuring magnitude."""
+    statistics = _aggregate_encoded_shap_statistics(
+        values, continuous, categorical, category_sizes
+    )
+    return statistics.set_index("feature")["mean_abs_shap"]
+
+
+def _aggregate_encoded_shap_statistics(
+    values: np.ndarray,
+    continuous: Iterable[str],
+    categorical: Iterable[str],
+    category_sizes: Iterable[int],
+) -> pd.DataFrame:
+    """Return comparable signed and absolute original-feature SHAP values."""
     values = np.asarray(values, dtype=float)
     if values.ndim != 2:
         raise ValueError("Encoded SHAP values must be a two-dimensional array")
@@ -54,19 +134,32 @@ def _aggregate_encoded_shap(
             f"received {values.shape[1]} columns, expected {expected_columns}"
         )
 
-    importance: Dict[str, float] = {}
+    rows = []
     offset = 0
     for feature in continuous:
-        importance[feature] = float(np.mean(np.abs(values[:, offset])))
+        contribution = values[:, offset]
+        rows.append(
+            {
+                "feature": feature,
+                "mean_abs_shap": float(np.mean(np.abs(contribution))),
+                "mean_signed_shap": float(np.mean(contribution)),
+            }
+        )
         offset += 1
     for feature, size in zip(categorical, category_sizes):
         # A categorical feature is represented by several one-hot columns.
         # Preserve their signs while grouping each row, then measure the
         # magnitude of the original feature's combined contribution.
         grouped_contribution = values[:, offset:offset + size].sum(axis=1)
-        importance[feature] = float(np.mean(np.abs(grouped_contribution)))
+        rows.append(
+            {
+                "feature": feature,
+                "mean_abs_shap": float(np.mean(np.abs(grouped_contribution))),
+                "mean_signed_shap": float(np.mean(grouped_contribution)),
+            }
+        )
         offset += size
-    return pd.Series(importance, dtype=float)
+    return pd.DataFrame(rows)
 
 
 def train_detector(
@@ -76,36 +169,31 @@ def train_detector(
     seed: int = 42,
     n_estimators: int = 300,
     test_size: float = 0.3,
-    shap_max_rows: int = 2000,
-    shap_scope: str = "misclassified_holdout_only",
+    shap_max_rows: int = 100,
+    shap_scope: str = PRIMARY_SHAP_SCOPE,
     compute_shap: bool = True,
     n_jobs: int = -1,
 ) -> DetectorResult:
-    if shap_scope != "misclassified_holdout_only":
+    if shap_scope != PRIMARY_SHAP_SCOPE:
         raise ValueError(
-            "Detector SHAP scope must be 'misclassified_holdout_only' so weighting "
-            "is based exclusively on detector errors"
+            f"Detector SHAP scope must be {PRIMARY_SHAP_SCOPE!r} so weighting "
+            "targets artifacts in synthetic rows the detector identifies correctly"
         )
     if compute_shap and shap_max_rows < 1:
         raise ValueError("shap_max_rows must be at least one when SHAP is enabled")
-    common = [c for c in real_df.columns if c in synthetic_df.columns]
-    if not common:
-        raise ValueError("Real and synthetic data have no common columns")
-    n = min(len(real_df), len(synthetic_df))
-    if n < 4:
-        raise ValueError("At least four real and synthetic rows are required")
-    real = real_df.loc[:, common].sample(n=n, random_state=seed).copy()
-    synthetic = synthetic_df.loc[:, common].sample(n=n, random_state=seed).copy()
+    common, combined, truth_all, train_indices, test_indices = prepare_detector_probe(
+        real_df, synthetic_df, seed=seed, test_size=test_size
+    )
+    n = len(combined) // 2
+    X = combined.copy(deep=True)
     categorical = [c for c in categorical_cols if c in common]
     for column in categorical:
-        real[column] = real[column].astype("object").where(real[column].notna(), "__missing__").astype(str)
-        synthetic[column] = synthetic[column].astype("object").where(
-            synthetic[column].notna(), "__missing__"
-        ).astype(str)
-    real["__is_real__"] = 1
-    synthetic["__is_real__"] = 0
-    combined = pd.concat([real, synthetic], ignore_index=True)
-    X, y = combined.drop(columns="__is_real__"), combined["__is_real__"]
+        X[column] = (
+            X[column]
+            .astype("object")
+            .where(X[column].notna(), "__missing__")
+            .astype(str)
+        )
 
     continuous = [c for c in common if c not in categorical]
     numeric_pipe = Pipeline([("imputer", SimpleImputer(strategy="median"))])
@@ -115,9 +203,10 @@ def train_detector(
     preprocessor = ColumnTransformer(
         [("num", numeric_pipe, continuous), ("cat", categorical_pipe, categorical)]
     )
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=seed, stratify=y
-    )
+    X_train = X.iloc[train_indices]
+    X_test = X.iloc[test_indices]
+    y_train = truth_all[train_indices]
+    y_test = truth_all[test_indices]
     X_train_p = preprocessor.fit_transform(X_train)
     X_test_p = preprocessor.transform(X_test)
     detector = RandomForestClassifier(
@@ -129,11 +218,10 @@ def train_detector(
     detector.fit(X_train_p, y_train)
     probabilities = detector.predict_proba(X_test_p)[:, 1]
     predictions = (probabilities >= 0.5).astype(int)
-    truth = y_test.to_numpy(dtype=int)
+    truth = np.asarray(y_test, dtype=int)
     misclassified = predictions != truth
-    false_real_as_synthetic = (truth == 1) & (predictions == 0)
-    false_synthetic_as_real = (truth == 0) & (predictions == 1)
-    misclassified_indices = np.flatnonzero(misclassified)
+    groups = outcome_group_masks(truth, predictions)
+    candidate_indices = np.flatnonzero(groups["correct_synthetic"])
     metrics = {
         "detector_auc": float(roc_auc_score(y_test, probabilities)),
         "detector_average_precision": float(average_precision_score(y_test, probabilities)),
@@ -143,33 +231,36 @@ def train_detector(
         "detector_holdout_rows": int(len(y_test)),
         "detector_misclassified_rows": int(misclassified.sum()),
         "detector_misclassification_rate": float(misclassified.mean()),
-        "detector_false_real_as_synthetic": int(false_real_as_synthetic.sum()),
-        "detector_false_synthetic_as_real": int(false_synthetic_as_real.sum()),
+        "detector_correct_real": int(groups["correct_real"].sum()),
+        "detector_false_real_as_synthetic": int(
+            groups["false_real_as_synthetic"].sum()
+        ),
+        "detector_correct_synthetic": int(groups["correct_synthetic"].sum()),
+        "detector_false_synthetic_as_real": int(
+            groups["false_synthetic_as_real"].sum()
+        ),
         "detector_shap_scope": shap_scope,
-        "detector_shap_candidate_rows": int(len(misclassified_indices)),
+        "detector_shap_candidate_rows": int(len(candidate_indices)),
         "detector_shap_rows": 0,
         "detector_shap_status": "disabled" if not compute_shap else "pending",
     }
 
     importance = pd.Series(0.0, index=common, dtype=float)
+    signed_importance = pd.Series(0.0, index=common, dtype=float)
     if compute_shap:
         try:
             import shap
         except ImportError as exc:
             raise RuntimeError("SHAP is required for A3/A4/A5; install the base requirements") from exc
-        if len(misclassified_indices) == 0:
-            metrics["detector_shap_status"] = "no_misclassified_holdout_rows"
-            return DetectorResult(metrics, importance)
-        if len(misclassified_indices) > shap_max_rows:
-            rng = np.random.default_rng(seed)
-            selected = np.sort(
-                rng.choice(misclassified_indices, shap_max_rows, replace=False)
-            )
-        else:
-            selected = misclassified_indices
+        if len(candidate_indices) == 0:
+            metrics["detector_shap_status"] = "no_correct_synthetic_holdout_rows"
+            return DetectorResult(metrics, importance, signed_importance)
+        selected = deterministic_row_subset(candidate_indices, shap_max_rows, seed)
         X_shap = X_test_p[selected]
         metrics["detector_shap_rows"] = int(len(selected))
-        metrics["detector_shap_status"] = "misclassified_holdout_rows_explained"
+        metrics["detector_shap_status"] = (
+            "correct_synthetic_holdout_rows_explained"
+        )
         values = shap.TreeExplainer(detector).shap_values(X_shap)
         if isinstance(values, list):
             values = values[1]
@@ -179,9 +270,14 @@ def train_detector(
         if categorical:
             encoder = preprocessor.named_transformers_["cat"].named_steps["onehot"]
             category_sizes = [len(categories) for categories in encoder.categories_]
-        grouped_importance = _aggregate_encoded_shap(
+        grouped_statistics = _aggregate_encoded_shap_statistics(
             np.asarray(values), continuous, categorical, category_sizes
-        )
-        importance.loc[grouped_importance.index] = grouped_importance
+        ).set_index("feature")
+        importance.loc[grouped_statistics.index] = grouped_statistics[
+            "mean_abs_shap"
+        ]
+        signed_importance.loc[grouped_statistics.index] = grouped_statistics[
+            "mean_signed_shap"
+        ]
         importance = normalize_signal(importance)
-    return DetectorResult(metrics, importance)
+    return DetectorResult(metrics, importance, signed_importance)

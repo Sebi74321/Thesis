@@ -51,6 +51,30 @@ privacy metrics are memorization-risk proxies, not a formal privacy guarantee.
 
 ### Measurement-aware generation and priority sensitivity
 
+The XAI weighting signal uses TreeSHAP only on correctly classified synthetic
+rows in the post-hoc detector's stratified audit holdout. This scope targets
+features that expose detectable generation artifacts; it does not mix in real
+rows or synthetic rows that already fool the detector. The detector metrics
+record all four real/synthetic outcomes and the number of rows available and
+actually explained.
+
+When CTAB-GAN+ discriminator snapshots are enabled, each snapshot is evaluated
+on the same deterministic balanced probe made from held-out real-audit and
+variant-synthetic rows. A real/fake critic threshold is calibrated on a
+disjoint audit-calibration portion using Youden's J statistic, while AUC and
+average precision remain threshold-independent context. GradientSHAP is saved
+separately for correct real, false real, correct synthetic, and false synthetic
+holdout rows. The primary comparison scope is correct synthetic, matching the
+post-hoc detector. Valid conditional vectors are sampled reproducibly and
+marginalized instead of evaluating the critic with an out-of-distribution
+all-zero conditional vector. Snapshot metrics, row-level outcomes, signed and
+absolute feature attributions, and the final-snapshot comparison with the
+post-hoc detector are written as separate CSV/JSON artifacts.
+Historical discriminator snapshots are evaluated against the same fixed output
+from the variant's final generator. The trajectory therefore measures how each
+historical critic responds to a common final-generator probe; it is not an
+epoch-matched generator/discriminator comparison.
+
 CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
 from the fitted training rows. Raw pre-restoration samples are saved as
 `synthetic_raw_<variant>.csv`; authoritative samples retain the usual

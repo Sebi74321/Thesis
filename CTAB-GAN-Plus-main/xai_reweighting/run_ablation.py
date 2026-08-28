@@ -417,6 +417,8 @@ def _save_postprocessing_diagnostics(model, output_dir: Path, variant: str) -> N
 
 def _save_discriminator_shap_artifacts(
     model,
+    real_probe: pd.DataFrame,
+    synthetic_probe: pd.DataFrame,
     output_dir: Path,
     variant: str,
     config: Dict[str, Any],
@@ -431,34 +433,171 @@ def _save_discriminator_shap_artifacts(
     from .discriminator_shap import evaluate_discriminator_snapshots
 
     excluded = list(shap_config.get("exclude_features", []))
-    if shap_config.get("exclude_target", True):
+    if shap_config.get("exclude_target", False):
         excluded.append(str(config["target_col"]))
     excluded = list(dict.fromkeys(excluded))
-    trajectory = evaluate_discriminator_snapshots(
+    evaluation = evaluate_discriminator_snapshots(
         model,
+        real_probe,
+        synthetic_probe,
         background_size=int(shap_config.get("background_size", 50)),
         explain_size=int(shap_config.get("explain_size", 100)),
+        test_size=float(config.get("detector", {}).get("test_size", 0.3)),
+        condition_samples=int(shap_config.get("condition_samples", 8)),
         seed=int(shap_config.get("seed", seed)),
         exclude_features=excluded,
     )
+    trajectory = evaluation.trajectory
     csv_name = f"discriminator_shap_{variant}.csv"
     atomic_write_csv(output_dir / csv_name, trajectory)
+    metrics_name = f"discriminator_snapshot_metrics_{variant}.csv"
+    predictions_name = f"discriminator_snapshot_predictions_{variant}.csv"
+    atomic_write_csv(output_dir / metrics_name, evaluation.metrics)
+    atomic_write_csv(output_dir / predictions_name, evaluation.predictions)
     metadata = {
         "variant": variant,
         "backend": generator_name,
         "method": "shap.GradientExplainer",
         "model": "ctabgan_plus_internal_discriminator",
-        "epochs": sorted(int(epoch) for epoch in trajectory["epoch"].unique()),
-        "background_rows": int(trajectory["background_rows"].iloc[0]),
-        "explained_rows": int(trajectory["explained_rows"].iloc[0]),
+        "epochs": sorted(int(epoch) for epoch in evaluation.metrics["epoch"].unique()),
+        "background_rows": (
+            int(trajectory["background_rows"].iloc[0]) if not trajectory.empty else 0
+        ),
+        "maximum_explained_rows_per_group": int(
+            shap_config.get("explain_size", 100)
+        ),
         "seed": int(shap_config.get("seed", seed)),
         "excluded_features": excluded,
-        "conditional_vector": "all_zero",
-        "aggregation": "sum_of_mean_absolute_encoded_shap_by_original_feature",
+        "probe": "balanced_real_audit_and_variant_synthetic_audit",
+        "temporal_interpretation": (
+            "historical_discriminator_snapshots_evaluated_against_a_fixed_"
+            "final_generator_probe"
+        ),
+        "probe_split": "calibration_and_stratified_holdout",
+        "threshold": "calibration_only_youden_j",
+        "primary_scope": "correct_synthetic_holdout_only",
+        "outcome_groups": [
+            "correct_real",
+            "false_real_as_synthetic",
+            "correct_synthetic",
+            "false_synthetic_as_real",
+        ],
+        "conditional_vector": "marginalized_valid_sampled_conditions",
+        "condition_samples": int(shap_config.get("condition_samples", 8)),
+        "aggregation": "signed_encoded_sum_then_mean_absolute_by_original_feature",
         "artifact": csv_name,
+        "metrics_artifact": metrics_name,
+        "predictions_artifact": predictions_name,
     }
     atomic_write_json(output_dir / f"discriminator_shap_{variant}.json", metadata)
     return metadata
+
+
+def _save_discriminator_detector_comparison(
+    output_dir: Path,
+    variant: str,
+    detector_importance: pd.Series,
+    detector_signed: pd.Series,
+    top_k: int,
+) -> None:
+    """Compare like-scoped post-hoc and final-snapshot feature importance."""
+    trajectory_path = output_dir / f"discriminator_shap_{variant}.csv"
+    if not trajectory_path.is_file():
+        return
+    trajectory = pd.read_csv(trajectory_path)
+    if trajectory.empty or "primary_scope" not in trajectory:
+        return
+    primary = trajectory[
+        trajectory["primary_scope"].astype(str).str.lower().isin({"true", "1"})
+    ].copy()
+    if primary.empty:
+        return
+    final_epoch = int(pd.to_numeric(primary["epoch"]).max())
+    primary = primary[pd.to_numeric(primary["epoch"]) == final_epoch].copy()
+    snapshot = primary.set_index("feature")
+    features = list(
+        dict.fromkeys(
+            [*detector_importance.index.astype(str), *snapshot.index.astype(str)]
+        )
+    )
+    comparison = pd.DataFrame({"feature": features})
+    comparison["detector_importance_share"] = comparison["feature"].map(
+        detector_importance.astype(float)
+    ).fillna(0.0)
+    comparison["detector_mean_signed_shap"] = comparison["feature"].map(
+        detector_signed.astype(float)
+    )
+    comparison["snapshot_importance_share"] = comparison["feature"].map(
+        pd.to_numeric(snapshot["importance_share"], errors="coerce")
+    ).fillna(0.0)
+    comparison["snapshot_mean_signed_shap"] = comparison["feature"].map(
+        pd.to_numeric(snapshot["mean_signed_shap"], errors="coerce")
+    )
+    signed_valid = (
+        comparison["detector_mean_signed_shap"].notna()
+        & comparison["snapshot_mean_signed_shap"].notna()
+        & ~np.isclose(comparison["detector_mean_signed_shap"], 0.0)
+        & ~np.isclose(comparison["snapshot_mean_signed_shap"], 0.0)
+    )
+    comparison["signed_direction_agreement"] = np.where(
+        signed_valid,
+        np.sign(comparison["detector_mean_signed_shap"])
+        == np.sign(comparison["snapshot_mean_signed_shap"]),
+        np.nan,
+    )
+    comparison["detector_rank"] = comparison[
+        "detector_importance_share"
+    ].rank(method="min", ascending=False).astype(int)
+    comparison["snapshot_rank"] = comparison[
+        "snapshot_importance_share"
+    ].rank(method="min", ascending=False).astype(int)
+    comparison["rank_difference_snapshot_minus_detector"] = (
+        comparison["snapshot_rank"] - comparison["detector_rank"]
+    )
+    comparison = comparison.sort_values(
+        ["detector_rank", "snapshot_rank", "feature"], kind="mergesort"
+    ).reset_index(drop=True)
+    name = f"discriminator_detector_shap_comparison_{variant}.csv"
+    atomic_write_csv(output_dir / name, comparison)
+
+    count = min(int(top_k), len(comparison))
+    detector_top = set(comparison.nsmallest(count, "detector_rank")["feature"])
+    snapshot_top = set(comparison.nsmallest(count, "snapshot_rank")["feature"])
+    union = detector_top | snapshot_top
+    spearman = comparison["detector_importance_share"].corr(
+        comparison["snapshot_importance_share"], method="spearman"
+    )
+    atomic_write_json(
+        output_dir / f"discriminator_detector_shap_comparison_{variant}.json",
+        {
+            "variant": variant,
+            "snapshot_epoch": final_epoch,
+            "shared_scope": "correct_synthetic_holdout_only",
+            "detector_method": "TreeSHAP",
+            "snapshot_method": "GradientExplainer",
+            "spearman_importance_correlation": (
+                float(spearman) if np.isfinite(spearman) else None
+            ),
+            "top_k": count,
+            "top_k_overlap_count": len(detector_top & snapshot_top),
+            "top_k_jaccard": float(len(detector_top & snapshot_top) / len(union))
+            if union
+            else 0.0,
+            "signed_direction_agreement_rate": (
+                float(
+                    pd.to_numeric(
+                        comparison.loc[
+                            signed_valid, "signed_direction_agreement"
+                        ],
+                        errors="coerce",
+                    ).mean()
+                )
+                if signed_valid.any()
+                else None
+            ),
+            "artifact": name,
+        },
+    )
 
 
 def run_experiment(
@@ -497,6 +636,8 @@ def run_experiment(
         generator_name == "ctabgan_plus"
         and config.get("discriminator_shap", {}).get("enabled", False)
     ):
+        snapshot_shap = config["discriminator_shap"]
+        detector_shap = config.get("detector", {})
         snapshot_frequency = config["generator"].get("snapshot_frq")
         epochs = int(config["generator"]["epochs"])
         if (
@@ -508,6 +649,22 @@ def run_experiment(
             raise ValueError(
                 "Enabled discriminator_shap requires generator.snapshot_frq to be "
                 "a positive integer no greater than generator.epochs"
+            )
+        if int(snapshot_shap.get("explain_size", 100)) != int(
+            detector_shap.get("shap_max_rows", 100)
+        ):
+            raise ValueError(
+                "Comparable detector and discriminator SHAP require equal "
+                "detector.shap_max_rows and discriminator_shap.explain_size"
+            )
+        if bool(snapshot_shap.get("exclude_target", False)):
+            raise ValueError(
+                "Comparable detector and discriminator SHAP must use the same "
+                "feature set; discriminator_shap.exclude_target must be false"
+            )
+        if int(snapshot_shap.get("seed", seed)) != seed:
+            raise ValueError(
+                "Comparable detector and discriminator SHAP must use the run seed"
             )
     if smoke:
         config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
@@ -656,7 +813,14 @@ def run_experiment(
         atomic_write_csv(baseline_audit_path, baseline_audit)
         atomic_write_csv(baseline_eval_path, baseline_eval)
         _save_discriminator_shap_artifacts(
-            baseline_model, output_dir, "A0", config, generator_name, seed
+            baseline_model,
+            splits.audit,
+            baseline_audit,
+            output_dir,
+            "A0",
+            config,
+            generator_name,
+            seed,
         )
 
     detector_cfg = config.get("detector", {})
@@ -666,9 +830,12 @@ def run_experiment(
         config["categorical_cols"],
         seed=seed,
         n_estimators=int(detector_cfg.get("n_estimators", 300)),
-        shap_max_rows=int(detector_cfg.get("shap_max_rows", 2000)),
+        test_size=float(detector_cfg.get("test_size", 0.3)),
+        shap_max_rows=int(detector_cfg.get("shap_max_rows", 100)),
         shap_scope=str(
-            detector_cfg.get("shap_scope", "misclassified_holdout_only")
+            detector_cfg.get(
+                "shap_scope", "correct_synthetic_holdout_only"
+            )
         ),
         n_jobs=int(config.get("n_jobs", -1)),
     )
@@ -682,6 +849,28 @@ def run_experiment(
     )
     atomic_write_csv(output_dir / "baseline_feature_components.csv", components)
     atomic_write_json(output_dir / "baseline_detector_metrics.json", audit_result.metrics)
+    detector_shap = pd.DataFrame(
+        {
+            "feature": audit_result.shap_importance.index.astype(str),
+            "importance_share": audit_result.shap_importance.to_numpy(dtype=float),
+            "mean_signed_shap": audit_result.shap_signed.reindex(
+                audit_result.shap_importance.index
+            ).to_numpy(dtype=float),
+        }
+    ).sort_values(
+        ["importance_share", "feature"],
+        ascending=[False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    detector_shap["rank"] = np.arange(1, len(detector_shap) + 1, dtype=int)
+    atomic_write_csv(output_dir / "baseline_detector_shap.csv", detector_shap)
+    _save_discriminator_detector_comparison(
+        output_dir,
+        "A0",
+        audit_result.shap_importance,
+        audit_result.shap_signed,
+        int(config.get("weighting", {}).get("top_k", 5)),
+    )
     diagnostics_cfg = config.get("baseline_diagnostics", {})
     if diagnostics_cfg.get("enabled", True):
         ranking, conditional_features, conditional_categories, conditional_detectors = (
@@ -934,7 +1123,14 @@ def run_experiment(
             _save_postprocessing_diagnostics(model, output_dir, variant)
             atomic_write_csv(output_dir / f"synthetic_{variant}.csv", synthetic)
             _save_discriminator_shap_artifacts(
-                model, output_dir, variant, config, generator_name, seed
+                model,
+                splits.audit,
+                synthetic.iloc[: len(splits.audit)].reset_index(drop=True),
+                output_dir,
+                variant,
+                config,
+                generator_name,
+                seed,
             )
         atomic_write_json(output_dir / f"augmentation_counts_{variant}.json", selection_counts)
 
