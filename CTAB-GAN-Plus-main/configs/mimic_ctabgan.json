@@ -51,7 +51,7 @@
     "test_fraction": 0.1
   },
   "weighting": {
-    "alpha": 4.0,
+    "alpha": 3.0,
     "gamma": 0.6,
     "top_k": 5,
     "w_max": 3.0,
