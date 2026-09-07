@@ -255,3 +255,50 @@ def test_tradeoff_directions_use_a0_for_every_domain(tmp_path):
         "utility_fidelity_privacy_tradeoff_heatmap.png",
     }
     assert all(path.is_file() and path.stat().st_size > 0 for path in paths)
+
+
+def test_privacy_distance_ratios_are_scored_by_closeness_to_one():
+    summary = pd.DataFrame(
+        [
+            {
+                "variant": variant,
+                "privacy_exact_match_rate": 0.0,
+                "privacy_synthetic_nn_p5": ratio,
+                "privacy_heldout_nn_p5": 1.0,
+                "privacy_median_distance_ratio": ratio,
+                "privacy_synthetic_nn_p95": ratio,
+                "privacy_heldout_nn_p95": 1.0,
+            }
+            for variant, ratio in (
+                ("A0", 1.30),
+                ("A1", 1.10),
+                ("A2", 0.90),
+                ("A3", 1.50),
+            )
+        ]
+    )
+
+    privacy = build_privacy_heatmap_scores(summary)
+    median = privacy[
+        privacy["metric"] == "privacy_median_distance_ratio"
+    ].set_index("variant")
+    assert np.isclose(median.loc["A1", "distance_from_ideal"], 0.10)
+    assert np.isclose(median.loc["A2", "distance_from_ideal"], 0.10)
+    assert np.isclose(median.loc["A1", "normalized_privacy_risk"], 0.0)
+    assert np.isclose(median.loc["A2", "normalized_privacy_risk"], 0.0)
+    assert np.isclose(median.loc["A3", "normalized_privacy_risk"], 1.0)
+
+    tradeoff = build_utility_fidelity_privacy_tradeoff_scores(
+        summary, pd.DataFrame(), []
+    )
+    median_tradeoff = tradeoff[
+        tradeoff["metric_key"]
+        == "privacy_proxy_privacy_median_distance_ratio"
+    ].set_index("variant")
+    assert np.isclose(median_tradeoff.loc["A1", "improvement_delta"], 0.20)
+    assert np.isclose(median_tradeoff.loc["A2", "improvement_delta"], 0.20)
+    assert np.isclose(median_tradeoff.loc["A3", "improvement_delta"], -0.20)
+    assert (
+        median_tradeoff.loc["A1", "direction_rule"]
+        == "a0_distance_to_ideal_minus_variant_distance_to_ideal"
+    )

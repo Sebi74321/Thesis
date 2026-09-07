@@ -1,0 +1,482 @@
+\chapter{Evaluation}
+\label{chap:evaluation}
+
+The generated data are evaluated from two broad perspectives. The first is
+\emph{statistical representativeness}: whether the synthetic data reproduce
+the marginal distributions, dependence structure, tails, rare categories, and
+rare combinations observed in real data. The second is \emph{practical
+performance and risk}: whether models trained on synthetic data transfer to
+untouched real patients, whether synthetic records remain distinguishable from
+real records, and whether they exhibit signs of memorising the training data.
+Within these two perspectives, the implementation reports five primary metric
+groups: fidelity, tail and rare-event coverage, downstream utility,
+real-versus-synthetic detectability, and privacy proxies.
+
+All primary metrics compare a generated dataset with the same frozen real
+validation or test partition. The validation partition is used during method
+development; the test partition is reserved for the final frozen
+configuration. Synthetic datasets contain the same number of rows across
+generator variants, and every A1--A5 result is compared with the A0 baseline
+under the same split and evaluation protocol.
+
+\section{Statistical Representativeness}
+\label{sec:statistical_representativeness}
+
+\subsection{Continuous-Feature Fidelity}
+\label{subsec:continuous_fidelity}
+
+Let $X_j^{\mathrm{real}}$ and $X_j^{\mathrm{syn}}$ denote the observed real and
+synthetic values of continuous feature $j$. Missing values are removed before
+the univariate distances are calculated.
+
+\subsubsection{Wasserstein Distance}
+
+The first Wasserstein distance measures the amount of probability mass that
+must be moved to transform one univariate distribution into the other. In
+terms of their empirical cumulative distribution functions (ECDFs), it is
+
+\begin{equation}
+    W_{1,j} = \int_{-\infty}^{\infty}
+        \left|F_j^{\mathrm{real}}(x)-F_j^{\mathrm{syn}}(x)\right|\,\mathrm{d}x.
+    \label{eq:evaluation_wasserstein}
+\end{equation}
+
+Smaller values indicate better agreement. Because raw Wasserstein distances
+depend on the unit and scale of a feature, the headline implementation also
+reports an IQR-scaled distance:
+
+\begin{equation}
+    W_{1,j}^{\mathrm{scaled}} = \frac{W_{1,j}}{s_j},
+    \qquad
+    s_j = Q_{.75}(X_j^{\mathrm{real}})-Q_{.25}(X_j^{\mathrm{real}}).
+    \label{eq:evaluation_scaled_wasserstein}
+\end{equation}
+
+If the real-data IQR is zero, the real-data standard deviation is used; if that
+is also zero or non-finite, $s_j$ is set to 1. The mean scaled Wasserstein
+distance across continuous features is one of the principal fidelity summary
+metrics.
+
+\subsubsection{Kolmogorov--Smirnov Statistic}
+
+The two-sample Kolmogorov--Smirnov statistic measures the largest absolute gap
+between the complete real and synthetic ECDFs:
+
+\begin{equation}
+    \operatorname{KS}_j = \sup_x
+        \left|F_j^{\mathrm{real}}(x)-F_j^{\mathrm{syn}}(x)\right|.
+    \label{eq:evaluation_ks}
+\end{equation}
+
+It lies in $[0,1]$, with zero indicating identical empirical distributions.
+Unlike the Wasserstein distance, it is invariant to the units of the feature.
+
+\subsubsection{Correlation Distance}
+
+To measure whether linear dependence between continuous variables is
+preserved, the implementation compares the real and synthetic Pearson
+correlation matrices. For $d_c$ continuous features,
+
+\begin{equation}
+    D_{\mathrm{corr}} =
+        \frac{\left\|R^{\mathrm{real}}-R^{\mathrm{syn}}\right\|_F}{d_c},
+    \label{eq:evaluation_correlation}
+\end{equation}
+
+where $\|\cdot\|_F$ is the Frobenius norm. Smaller values indicate better
+preservation of pairwise correlations.
+
+\subsection{Categorical-Feature Fidelity}
+\label{subsec:categorical_fidelity}
+
+Categorical distributions are compared using the Jensen--Shannon distance.
+Let $P_j$ and $Q_j$ be the real and synthetic probability vectors over the
+union of observed categories, including an explicit missing-value category,
+and let $M_j=(P_j+Q_j)/2$. The distance is
+
+\begin{equation}
+    \operatorname{JSDist}_j =
+    \sqrt{\frac{1}{2}D_{\mathrm{KL}}(P_j\|M_j)
+          +\frac{1}{2}D_{\mathrm{KL}}(Q_j\|M_j)}.
+    \label{eq:evaluation_js}
+\end{equation}
+
+The implementation uses logarithms to base 2, so the result lies in $[0,1]$.
+A value of zero means that the category frequencies are identical. The mean
+Jensen--Shannon distance across categorical features is reported as the
+categorical fidelity summary.
+
+\section{Tail and Rare-Case Representation}
+\label{sec:tail_rare_evaluation}
+
+Global distribution distances can conceal clinically important discrepancies
+in low-frequency regions. The implementation therefore combines tail-restricted
+CDF comparison, quantile mass and location errors, rare-category errors, and
+rare-outcome errors.
+
+\subsection{CDF-Tail Divergence}
+\label{subsec:cdf_tail_divergence}
+
+For each continuous feature, the main runner evaluates the upper tail beginning
+at the real-data 90th percentile. Let
+$q_{j,.90}=Q_{.90}(X_j^{\mathrm{real}})$ and
+$m_j=\max(X_j^{\mathrm{real}})$. The tail divergence is
+
+\begin{equation}
+    D_{j}^{\mathrm{tail}} =
+    \max_{x\in\mathcal{G}_j}
+    \left|F_j^{\mathrm{real}}(x)-F_j^{\mathrm{syn}}(x)\right|,
+    \label{eq:evaluation_cdf_tail}
+\end{equation}
+
+where $\mathcal{G}_j$ is a 200-point equally spaced grid over
+$[q_{j,.90},m_j]$. If the interval is degenerate, the divergence is set to
+zero. Smaller values indicate closer agreement in the upper-tail CDF. The
+mean across continuous features is reported as
+\texttt{mean\_cdf\_tail\_divergence}.
+
+\subsection{Quantile Mass, Coverage, and Location Error}
+
+The implementation evaluates the lower 5th percentile and the upper 95th and
+99th percentiles. For a lower-tail probability $\tau=.05$, define
+
+\begin{equation}
+    p_{j,\tau}^{\mathrm{real}}
+        =P(X_j^{\mathrm{real}}\le q_{j,\tau}),
+    \qquad
+    p_{j,\tau}^{\mathrm{syn}}
+        =P(X_j^{\mathrm{syn}}\le q_{j,\tau}),
+\end{equation}
+
+where $q_{j,\tau}$ is estimated from the real evaluation partition. For upper
+quantiles, the probabilities are instead calculated using
+$X_j\ge q_{j,\tau}$. The tail-mass error is
+
+\begin{equation}
+    E_{j,\tau}^{\mathrm{mass}} =
+        \left|p_{j,\tau}^{\mathrm{syn}}-p_{j,\tau}^{\mathrm{real}}\right|.
+    \label{eq:evaluation_tail_mass}
+\end{equation}
+
+Coverage is the observed synthetic tail mass divided by the nominal expected
+tail probability and capped at one:
+
+\begin{equation}
+    C_{j,\tau} = \min\left(
+        \frac{p_{j,\tau}^{\mathrm{syn}}}{e_{\tau}},1\right),
+    \qquad
+    e_{\tau}=\begin{cases}
+        \tau, & \text{lower tail},\\
+        1-\tau, & \text{upper tail}.
+    \end{cases}
+    \label{eq:evaluation_tail_coverage}
+\end{equation}
+
+Thus, coverage measures whether enough synthetic observations reach the real
+tail threshold, while the mass error also penalises excessive tail mass. The
+scaled quantile-location error is
+
+\begin{equation}
+    E_{j,\tau}^{\mathrm{quantile}} =
+        \frac{\left|Q_{\tau}(X_j^{\mathrm{syn}})
+        -Q_{\tau}(X_j^{\mathrm{real}})\right|}{s_j},
+    \label{eq:evaluation_quantile_error}
+\end{equation}
+
+where $s_j$ is the same robust scale used in
+Equation~\ref{eq:evaluation_scaled_wasserstein}.
+
+\subsection{Rare Categories and Rare Outcomes}
+
+For categorical feature $j$, let
+
+\begin{equation}
+    \mathcal{C}^{\mathrm{rare}}_j =
+        \left\{c:P_{\mathrm{real}}(X_j=c)\le .05\right\}.
+\end{equation}
+
+The rare-category frequency error is
+
+\begin{equation}
+    E_j^{\mathrm{rare\mbox{-}cat}} =
+        \sum_{c\in\mathcal{C}^{\mathrm{rare}}_j}
+        \left|P_{\mathrm{real}}(X_j=c)
+        -P_{\mathrm{syn}}(X_j=c)\right|.
+    \label{eq:evaluation_rare_category}
+\end{equation}
+
+For the prediction target, the code also identifies the least frequent class
+in the real evaluation partition and reports its absolute frequency error:
+
+\begin{equation}
+    E^{\mathrm{rare\mbox{-}outcome}} =
+        \left|P_{\mathrm{real}}(Y=c_{\mathrm{rare}})
+        -P_{\mathrm{syn}}(Y=c_{\mathrm{rare}})\right|.
+    \label{eq:evaluation_rare_outcome}
+\end{equation}
+
+Lower values are preferred for both metrics.
+
+\subsection{RQ1 Fixed-Reference Rare-Region Metrics}
+\label{subsec:rq1_rare_regions}
+
+The multi-generator architecture comparison additionally fixes all rare-region
+definitions using the real training partition. This avoids allowing each
+evaluation sample to move the thresholds. For a continuous feature, the fixed
+regions are the values at or below the training 5th percentile and at or above
+the training 95th percentile. For a categorical feature, a category is rare
+when its training frequency is at most 5\%. At the 5th, 95th, and 99th
+continuous-feature quantiles, the code reports the absolute difference between
+real-evaluation and synthetic tail mass and the scaled quantile-location error.
+
+A row is also flagged as belonging to a joint rare region when at least two of
+the fixed continuous-tail or rare-category conditions hold. If
+$Z_{ij}\in\{0,1\}$ indicates that record $i$ occupies rare region $j$, the
+joint rare-region mass is
+
+\begin{equation}
+    p^{\mathrm{joint}}(D) = \frac{1}{|D|}
+        \sum_{i\in D}\mathbb{I}\!\left[\sum_j Z_{ij}\ge 2\right],
+    \label{eq:evaluation_joint_rare_mass}
+\end{equation}
+
+and the reported error is
+
+\begin{equation}
+    E^{\mathrm{joint}} = \left|
+        p^{\mathrm{joint}}(D_{\mathrm{eval}})
+        -p^{\mathrm{joint}}(D_{\mathrm{syn}})\right|.
+    \label{eq:evaluation_joint_rare_error}
+\end{equation}
+
+The least frequent target class is determined from the real training
+partition. Within this class, the implementation recomputes continuous and
+categorical fidelity metrics after excluding the target itself from the
+categorical predictors. This outcome-conditional analysis checks whether a
+generator represents the feature distributions of rare-outcome patients, not
+merely the overall outcome frequency.
+
+Finally, the RQ1 runner estimates a finite-sample reference by drawing two
+independent bootstrap samples from the same real evaluation partition and
+computing the complete fidelity and rare-region protocol between them. Model
+results are reported both directly and relative to this real--real reference.
+The reference provides context for sampling variability: even two finite real
+samples are not expected to have exactly zero empirical distance.
+
+\subsection{Fixed-Size Rare-Combination Support Coverage}
+\label{subsec:support_coverage}
+
+Support coverage is implemented as a supplementary standalone analysis rather
+than as an output of the standard A0--A5 evaluation runner. It measures whether
+rare multivariate configurations found in real data occur at least once in the
+synthetic data without constructing the full joint distribution over all
+features.
+
+Numeric variables are discretised using quantile bins learned exclusively from
+the real data; categorical variables are matched directly. For a feature
+subset $S$ of fixed size $k$, the target label can optionally be appended to
+the tuple. Let $\mathcal{R}_S$ be the set of real tuples whose empirical
+frequency is at most the configured rarity threshold, and let
+$\mathcal{S}_S$ be the synthetic support. Coverage for subset $S$ is
+
+\begin{equation}
+    \operatorname{SC}(S) =
+        \frac{|\mathcal{R}_S\cap\mathcal{S}_S|}{|\mathcal{R}_S|}.
+    \label{eq:evaluation_support_coverage}
+\end{equation}
+
+The reported support coverage is the mean over valid $k$-feature subsets; its
+standard deviation and the numbers of rare and covered tuples are also saved.
+If the number of possible subsets exceeds the configured maximum, subsets are
+sampled reproducibly using seed 42. This fixed-size design limits combinatorial
+growth and makes coverage more comparable between datasets with different
+numbers of columns. Higher coverage is better, although it measures presence
+only and does not assess whether the synthetic tuple frequencies are correct.
+
+\section{Practical Performance and Risk}
+\label{sec:practical_performance_risk}
+
+\subsection{Downstream Predictive Utility}
+\label{subsec:downstream_utility}
+
+The principal utility experiment follows a train-on-synthetic,
+test-on-real protocol. A class-balanced random forest is fitted using a
+variant's synthetic data and evaluated on the untouched real validation or test
+partition. Numeric predictors are median-imputed and robust-scaled;
+categorical predictors are most-frequent-imputed and one-hot encoded. The
+prediction target is excluded from the predictors. The classifier uses its
+fixed argmax decision rule; no decision threshold is selected using audit,
+validation, or test labels.
+
+Mortality is evaluated under two training regimes. For the synthetic-only
+\texttt{mortality} task, the generated class prevalence is left unchanged.
+The \texttt{mortality\_balanced} task resamples the synthetic training data to
+a 50/50 class balance. Both regimes are evaluated on the same naturally
+imbalanced real partition. The positive label is configured explicitly as 1
+rather than being selected manually after inspecting the evaluation data. In
+the mixed real/synthetic experiment described below, the unbalanced regime
+instead fixes the combined training prevalence to that of the original real
+training partition so that mixture fractions are comparable.
+
+Let TP, TN, FP, and FN denote the binary confusion-matrix counts for the
+configured positive class. The main threshold-dependent metrics are
+
+\begin{align}
+    \operatorname{Accuracy} &=
+        \frac{\mathrm{TP}+\mathrm{TN}}
+             {\mathrm{TP}+\mathrm{TN}+\mathrm{FP}+\mathrm{FN}},
+        \label{eq:evaluation_accuracy}\\
+    \operatorname{Precision}_{+} &=
+        \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}},
+        \label{eq:evaluation_precision}\\
+    \operatorname{Recall}_{+} &=
+        \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}},
+        \label{eq:evaluation_recall}\\
+    F1_{+} &=
+        2\frac{\operatorname{Precision}_{+}\operatorname{Recall}_{+}}
+        {\operatorname{Precision}_{+}+\operatorname{Recall}_{+}},
+        \label{eq:evaluation_f1}\\
+    \operatorname{BalancedAccuracy} &=
+        \frac{1}{2}\left(
+        \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}}+
+        \frac{\mathrm{TN}}{\mathrm{TN}+\mathrm{FP}}\right).
+        \label{eq:evaluation_balanced_accuracy}
+\end{align}
+
+Accuracy is retained for completeness, but balanced accuracy, macro F1, and
+positive-class recall are more informative for imbalanced mortality data.
+Macro precision, recall, and F1 are calculated by treating each class as the
+positive class in turn and taking the unweighted mean. This prevents the
+majority class from dominating the summary.
+
+The implementation additionally reports ROC-AUC and PR-AUC from predicted
+positive-class probabilities. ROC-AUC measures the probability that a randomly
+selected positive record receives a higher score than a randomly selected
+negative record. PR-AUC summarises the precision--recall curve and is
+particularly informative when the positive outcome is rare. For all utility
+metrics, larger values indicate better transfer from synthetic training data
+to real patients.
+
+The standalone \texttt{RareEventRecall} utility provides a narrower
+supplementary analysis. It automatically selects the least frequent real class,
+not a manually chosen class, and compares rare-class recall for a real-to-real
+random-forest baseline with recall from a synthetic-to-real model. The standard
+A0--A5 pipeline supersedes this single-metric view by reporting configured
+positive-class recall together with precision, F1, balanced accuracy, ROC-AUC,
+and PR-AUC on a common frozen split.
+
+\subsection{Mixed Real/Synthetic Utility}
+\label{subsec:mixed_utility_evaluation}
+
+Two mixture protocols test how synthetic data behave when combined with real
+training records. Let $N=|D_{\mathrm{train}}|$ and let $f$ be the configured
+synthetic fraction parameter.
+
+In the additive protocol, all $N$ real rows are retained and $fN$ synthetic
+rows are added. The final training size is $(1+f)N$, with
+$f\in\{0,.25,.50,1.0\}$. In the replacement protocol, the total size remains
+$N$: $(1-f)N$ real rows are combined with $fN$ synthetic rows, using
+$f\in\{0,.25,.50,.75,1.0\}$. The requested class prevalence is enforced at
+every fraction. MIMIC-IV uses five deterministic repeats with 300-tree random
+forests; WiDS uses three repeats with 100-tree forests to limit runtime. Means
+and standard deviations are reported for the same utility metrics defined
+above.
+
+\subsection{Real-versus-Synthetic Detectability}
+\label{subsec:evaluation_detectability}
+
+For each variant, a balanced probe is formed from equally many real evaluation
+records and synthetic records. A class-balanced 300-tree random forest is
+trained to predict whether a record is real. Thirty per cent of the probe is
+held out using a stratified split. Detector ROC-AUC, average precision, and
+accuracy are reported.
+
+For a balanced real-versus-synthetic problem, ROC-AUC $=0.5$ indicates chance
+ranking and therefore low detectability. Values approaching 1 indicate that
+the distributions are readily separable. Detector AUC should be interpreted by
+its distance from 0.5 rather than by applying the usual assumption that a
+larger classification AUC is desirable. Average precision and accuracy provide
+supporting context but depend more directly on class balance and the fixed 0.5
+decision threshold.
+
+\subsection{Memorisation and Privacy Proxies}
+\label{subsec:privacy_proxies}
+
+The evaluation includes two families of memorisation-risk indicators. They are
+privacy proxies only; they do not establish differential privacy or quantify a
+formal privacy budget.
+
+First, the exact-match rate is the fraction of synthetic rows that are
+identical across all columns to at least one real training row:
+
+\begin{equation}
+    R_{\mathrm{exact}} = \frac{1}{|D_{\mathrm{syn}}|}
+        \sum_{\mathbf{x}\in D_{\mathrm{syn}}}
+        \mathbb{I}[\mathbf{x}\in D_{\mathrm{train}}].
+    \label{eq:evaluation_exact_match}
+\end{equation}
+
+Lower values indicate fewer direct copies.
+
+Second, nearest-neighbour distances are calculated after applying a shared
+preprocessing transformation fitted on the real training reference. Numeric
+variables are median-imputed and robust-scaled, categorical variables are
+most-frequent-imputed and one-hot encoded, and Euclidean distances are divided
+by the square root of the encoded dimensionality. For query record
+$\mathbf{x}$,
+
+\begin{equation}
+    d(\mathbf{x},D_{\mathrm{train}}) =
+        \frac{1}{\sqrt{p}}
+        \min_{\mathbf{z}\in D_{\mathrm{train}}}
+        \|\widetilde{\mathbf{x}}-\widetilde{\mathbf{z}}\|_2,
+    \label{eq:evaluation_nn_distance}
+\end{equation}
+
+where $p$ is the number of transformed columns. The 5th, 50th, and 95th
+percentiles are reported separately for synthetic queries and held-out real
+queries. Their percentile-wise ratio is
+
+\begin{equation}
+    R_q^{\mathrm{NN}} =
+        \frac{Q_q(d(D_{\mathrm{syn}},D_{\mathrm{train}}))}
+             {Q_q(d(D_{\mathrm{eval}},D_{\mathrm{train}}))},
+    \qquad q\in\{.05,.50,.95\}.
+    \label{eq:evaluation_nn_ratio}
+\end{equation}
+
+A ratio near 1 means that synthetic records are about as close to the training
+set as naturally held-out real records. Ratios below 1 indicate unusually close
+synthetic records and therefore greater potential memorisation risk. Ratios
+above 1 are not automatically preferable, because excessive distance can also
+indicate poor fidelity. For WiDS, exact matching remains exhaustive, while
+nearest-neighbour work uses deterministic caps of 20,000 reference rows and
+10,000 query rows.
+
+\section{Comparison and Reporting}
+\label{sec:evaluation_reporting}
+
+For the reweighting experiment, A0 is the primary controlled reference. For a
+metric $m$, the raw ablation difference is
+
+\begin{equation}
+    \Delta_m^{(a)} = m^{(a)}-m^{(\mathrm{A0})},
+    \qquad a\in\{\mathrm{A1},\ldots,\mathrm{A5}\}.
+    \label{eq:evaluation_ablation_delta}
+\end{equation}
+
+Utility metrics are additionally compared with a real-only model trained on
+the original real training partition. The reporting code preserves raw values
+and raw deltas, then applies metric-specific direction rules only for
+visualisation. For error and distance metrics, a reduction relative to A0 is an
+improvement. For utility and coverage metrics, an increase is an improvement.
+For detector AUC and average precision, improvement is defined as movement
+toward the chance target of 0.5. Privacy-proxy distance ratios are interpreted
+relative to the held-out-real reference of 1.
+
+No single metric is sufficient to establish synthetic-data quality. A model
+can reproduce marginal distributions while omitting rare combinations, obtain
+high utility while remaining easily detectable, or appear private merely
+because its samples are unrealistic. Conclusions are therefore based on the
+joint pattern across fidelity, tail and rare-case representation, downstream
+utility, detectability, and privacy proxies rather than on one aggregate score.

@@ -107,24 +107,24 @@ PRIVACY_SCORE_SPECS: dict[str, dict[str, Any]] = {
     "privacy_nn_p5_distance_ratio": {
         "label": "NN p5 distance ratio",
         "ideal": 1.0,
-        "direction": "higher",
+        "direction": "target",
         "numerator": "privacy_synthetic_nn_p5",
         "denominator": "privacy_heldout_nn_p5",
-        "interpretation": "1.0 equals the held-out-real p5 distance from real training data.",
+        "interpretation": "Values closer to 1.0 better match the held-out-real p5 distance from real training data.",
     },
     "privacy_median_distance_ratio": {
         "label": "NN median distance ratio",
         "ideal": 1.0,
-        "direction": "higher",
-        "interpretation": "1.0 equals the held-out-real median distance from training data.",
+        "direction": "target",
+        "interpretation": "Values closer to 1.0 better match the held-out-real median distance from training data.",
     },
     "privacy_nn_p95_distance_ratio": {
         "label": "NN p95 distance ratio",
         "ideal": 1.0,
-        "direction": "higher",
+        "direction": "target",
         "numerator": "privacy_synthetic_nn_p95",
         "denominator": "privacy_heldout_nn_p95",
-        "interpretation": "1.0 equals the held-out-real p95 distance from real training data.",
+        "interpretation": "Values closer to 1.0 better match the held-out-real p95 distance from real training data.",
     },
 }
 
@@ -406,8 +406,14 @@ def build_privacy_heatmap_scores(summary: pd.DataFrame) -> pd.DataFrame:
             values = pd.to_numeric(indexed.loc[variants, metric], errors="coerce")
 
         direction = str(specification["direction"])
+        ideal = float(specification["ideal"])
         # A lower risk score always means the more favorable privacy proxy.
-        risk = values if direction == "lower" else -values
+        if direction == "lower":
+            risk = values
+        elif direction == "target":
+            risk = (values - ideal).abs()
+        else:
+            raise ValueError(f"Unknown privacy-proxy direction: {direction!r}")
         finite = risk[np.isfinite(risk)]
         if finite.empty:
             normalized = pd.Series(np.nan, index=values.index)
@@ -425,9 +431,10 @@ def build_privacy_heatmap_scores(summary: pd.DataFrame) -> pd.DataFrame:
                     "metric": metric,
                     "display_metric": str(specification["label"]),
                     "direction": direction,
-                    "heldout_equivalence_value": float(specification["ideal"]),
+                    "heldout_equivalence_value": ideal,
                     "interpretation": str(specification["interpretation"]),
                     "absolute_value": values.loc[variant],
+                    "distance_from_ideal": risk.loc[variant],
                     "normalized_privacy_risk": normalized.loc[variant],
                 }
             )
@@ -561,12 +568,15 @@ def build_utility_fidelity_privacy_tradeoff_scores(
                     privacy_indexed.loc[(metric, variant), "absolute_value"],
                     errors="coerce",
                 )
+                ideal = float(specification["ideal"])
                 if direction == "lower":
                     improvement = reference_value - value
                     rule = "a0_privacy_risk_minus_variant_privacy_risk"
+                elif direction == "target":
+                    improvement = abs(reference_value - ideal) - abs(value - ideal)
+                    rule = "a0_distance_to_ideal_minus_variant_distance_to_ideal"
                 else:
-                    improvement = value - reference_value
-                    rule = "variant_distance_ratio_minus_a0_distance_ratio"
+                    raise ValueError(f"Unknown privacy-proxy direction: {direction!r}")
                 rows.append(
                     {
                         "domain": "privacy_proxy",
@@ -577,7 +587,7 @@ def build_utility_fidelity_privacy_tradeoff_scores(
                         "variant": variant,
                         "reference": "A0",
                         "direction_rule": rule,
-                        "ideal_value": float(specification["ideal"]),
+                        "ideal_value": ideal,
                         "absolute_value": value,
                         "reference_value": reference_value,
                         "improvement_delta": improvement,

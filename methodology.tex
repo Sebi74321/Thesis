@@ -1,0 +1,527 @@
+% Required in the document preamble:
+% \usepackage{tikz}
+% \usetikzlibrary{arrows.meta,positioning,calc}
+
+\chapter{Methodology}
+\label{chap:methodology}
+
+This chapter describes the implemented framework for identifying weaknesses in
+synthetic tabular health data and using those weaknesses to guide a controlled
+retraining intervention. The central design separates two questions. First,
+which features contribute most strongly to detectable differences between real
+and synthetic records? Second, within those features, which regions of the real
+distribution are underrepresented by the generator? Feature-level signals
+answer the first question, whereas one-sided region deficits answer the second.
+The two are combined only when assigning sampling weights to real training
+rows. This distinction is important: SHAP values determine where to focus, but
+they do not directly identify which real records should be replicated.
+
+\section{Approach Overview}
+\label{sec:approach_overview}
+
+Figure~\ref{fig:methodology_workflow} presents the complete workflow. The real
+dataset is divided once into mutually exclusive training, audit, validation,
+and test partitions. A baseline generator (A0) is fitted only on the training
+partition. Synthetic records from A0 and real records from the audit partition
+are then used to fit a post-hoc real-versus-synthetic detector. TreeSHAP,
+feature-wise distribution mismatch, and tail or rare-category deficit signals
+are derived from this audit comparison. These signals define the feature
+priorities for variants A2--A5. Separately, one-sided frequency deficits are
+estimated for regions of every feature. Each real training row receives a
+weight according to the deficits of the selected-feature regions that it
+occupies. Weighted bootstrap samples are appended to the original training
+data, and a fresh generator is fitted for each variant. A1 uses the same amount
+of additional data but samples uniformly, thereby controlling for the effect
+of increasing the training-set size. All generators are evaluated on the same
+untouched validation or test partition.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=5mm and 8mm,
+        box/.style={draw, rounded corners, align=center, minimum height=9mm,
+                    text width=48mm, font=\small},
+        branch/.style={box, text width=42mm},
+        arrow/.style={-{Latex[length=2mm]}, thick},
+        sidearrow/.style={arrow, rounded corners},
+        note/.style={font=\scriptsize, align=center, fill=white, inner sep=1pt}
+    ]
+        \node[box] (data) {Real tabular health data};
+        \node[box, below=of data] (split) {Target-stratified partition\\60\% train, 20\% audit,\\10\% validation, 10\% test};
+        \node[box, below=of split] (a0) {Fit baseline generator A0\\on the real training partition};
+        \node[box, below=of a0] (auditgen) {Generate the A0 synthetic\\audit sample};
+        \node[box, below=of auditgen] (signals) {Audit comparison\\random-forest detector and TreeSHAP;\\mismatch and tail-deficit signals};
+
+        \node[branch, below left=of signals.south] (priority) {Feature-level path\\A2--A5 priorities and\\top-$k$ feature selection};
+        \node[branch, below right=of signals.south] (regions) {Region-level path\\one-sided deficits between\\real audit and A0};
+
+        \node[box, anchor=north] (weights)
+            at ([yshift=-7mm]$(signals.center |- priority.south)$)
+            {Training-data intervention\\uniform bootstrap for A1;\\weighted bootstrap for A2--A5};
+        \node[box, below=of weights] (retrain) {Fit fresh A1--A5\\generator instances};
+        \node[box, below=of retrain] (evaluate) {Common evaluation on validation or test\\fidelity, utility, tails, detectability,\\and privacy proxies};
+
+        \draw[arrow] (data) -- (split);
+        \draw[arrow] (split) -- node[note, right] {real train} (a0);
+        \draw[arrow] (a0) -- (auditgen);
+        \draw[arrow] (auditgen) -- (signals);
+        \draw[sidearrow] (split.west) -- ++(-14mm,0) |- node[note, near end, left] {real audit} (signals.west);
+        \draw[arrow] (signals) -- (priority);
+        \draw[arrow] (signals) -- (regions);
+        \draw[arrow] (priority) |- (weights);
+        \draw[arrow] (regions) |- (weights);
+        \draw[sidearrow] (split.east) -- ++(14mm,0) |- node[note, near end, right] {original real train} (weights.east);
+        \draw[arrow] (weights) -- (retrain);
+        \draw[arrow] (retrain) -- (evaluate);
+        \draw[sidearrow] (a0.east) -- ++(26mm,0) |- node[note, near end, right] {A0 synthetic result} (evaluate.east);
+        \draw[sidearrow] (split.west) -- ++(-26mm,0) |- node[note, near end, left] {validation or test} (evaluate.west);
+    \end{tikzpicture}
+    \caption{Implemented XAI-guided retraining workflow. The audit partition is
+    used to construct the intervention; the validation or test partition is
+    used only for final comparison of the variants.}
+    \label{fig:methodology_workflow}
+\end{figure}
+
+\section{Data Partitioning and Experimental Control}
+\label{sec:data_partitioning}
+
+Let the complete real dataset be denoted by $D$. A target-stratified split with
+fixed seed 42 partitions $D$ into
+
+\begin{equation}
+    D = D_{\mathrm{train}} \mathbin{\dot\cup} D_{\mathrm{audit}}
+        \mathbin{\dot\cup} D_{\mathrm{val}} \mathbin{\dot\cup} D_{\mathrm{test}},
+\end{equation}
+
+with proportions $0.60$, $0.20$, $0.10$, and $0.10$, respectively. The split
+indices are persisted and checked for overlap and completeness. The training
+partition is the only source of rows used to fit a generator. The audit
+partition is reserved for constructing the detector, feature signals, and
+region deficits. During model development, variants are evaluated on
+$D_{\mathrm{val}}$. Once a configuration is frozen, the same procedure can be
+run once against $D_{\mathrm{test}}$. This separation prevents the rows used to
+measure final performance from influencing the reweighting intervention.
+
+The same persisted split, generator seed, augmentation size, and evaluation
+protocol are used across all variants within a run. Each variant nevertheless
+fits a fresh generator instance in an isolated backend directory. Thus, the
+comparison changes the composition of the generator's training data while
+holding the remaining experimental conditions fixed.
+
+\section{Baseline Synthetic Data Generation}
+\label{sec:baseline_generation}
+
+The baseline variant A0 is fitted directly on $D_{\mathrm{train}}$, without
+augmentation. It produces two synthetic datasets. The first contains
+$|D_{\mathrm{audit}}|$ rows and is used only to construct the intervention. The
+second contains $|D_{\mathrm{train}}|$ rows and is used in the common evaluation
+protocol. All later feature priorities and region deficits are therefore
+defined relative to the same A0 generator.
+
+The implementation exposes CTAB-GAN+, CTGAN, and the DP-CGANS generator
+architecture through a common dataframe-in/dataframe-out adapter. This allows
+the same split, intervention, and evaluation code to be used for all three
+backends. The DP-CGANS backend is explicitly run with
+\texttt{private=false}; it is an architectural baseline and must not be
+interpreted as a differentially private model or as an end-to-end privacy
+guarantee.
+
+Before the retraining ablation, the three generator architectures can be
+compared without intervention on the same persisted split. The split seed
+remains 42, while generator seeds 42, 43, and 44 provide three independent
+fits per architecture. Every completed fit is checkpointed, sampled, and
+evaluated using the protocol in Section~\ref{sec:evaluation_protocol}; results
+are summarised by their mean and standard deviation. This initial comparison
+measures architecture-level differences, whereas the A0--A5 experiment tests
+the effect of changing the training-row sampling distribution.
+
+\section{Post-Hoc Detector and Feature-Level Signals}
+\label{sec:feature_signals}
+
+\subsection{Real-versus-Synthetic Detector}
+
+A balanced audit probe is formed from equally many rows from
+$D_{\mathrm{audit}}$ and the A0 synthetic audit sample. Real records receive
+label 1 and synthetic records label 0. The probe is divided, using stratified
+sampling, into a 70\% detector-training partition and a 30\% detector holdout.
+Numeric variables are median-imputed; categorical variables are
+most-frequent-imputed and one-hot encoded. A class-balanced random forest with
+300 trees is then trained to estimate
+
+\begin{equation}
+    h(\mathbf{x}) = P(y_{\mathrm{real}}=1\mid\mathbf{x}).
+\end{equation}
+
+Detector ROC-AUC, average precision, accuracy, and all four real/synthetic
+classification outcomes are retained as audit diagnostics.
+
+\subsection{TreeSHAP Importance}
+\label{subsec:treeshap_importance}
+
+TreeSHAP explanations are not computed over every detector holdout record.
+They are computed for at most 100 \emph{correctly detected synthetic} holdout
+records. This scope targets features that expose detectable generator
+artifacts. Synthetic records that already fool the detector and all real
+records are excluded from the weighting signal.
+
+For a numeric feature $j$, the raw feature importance is
+
+\begin{equation}
+    I_j = \frac{1}{|E|}\sum_{i\in E}|\phi_{ij}|,
+    \label{eq:raw_shap_importance}
+\end{equation}
+
+where $E$ is the explained subset. For a categorical feature, the signed SHAP
+contributions of its one-hot columns are first summed within each row; the
+absolute value is taken only after this aggregation. The implementation scales
+the resulting importances by their maximum, not by their sum:
+
+\begin{equation}
+    \widehat{I}_j =
+    \begin{cases}
+        I_j / \max_k I_k, & \max_k I_k > 0,\\
+        0, & \text{otherwise}.
+    \end{cases}
+    \label{eq:max_normalized_shap}
+\end{equation}
+
+If there are no correctly detected synthetic holdout records, the SHAP signal
+is explicitly set to zero rather than being replaced by explanations from a
+different outcome group.
+
+\subsection{Distribution-Mismatch Signal}
+\label{subsec:mismatch_signal}
+
+The mismatch signal measures feature-level disagreement between
+$D_{\mathrm{audit}}$ and the A0 synthetic audit sample. For a continuous
+feature $j$, the raw mismatch is the first Wasserstein distance divided by the
+interquartile range of the real audit feature:
+
+\begin{equation}
+    U_j =
+    \frac{W_1(X^{\mathrm{audit}}_j,X^{\mathrm{A0}}_j)}
+         {\operatorname{IQR}(X^{\mathrm{audit}}_j)}.
+    \label{eq:continuous_mismatch}
+\end{equation}
+
+If the interquartile range is zero, the standard deviation and then 1 are used
+as fallbacks. For a categorical feature, $U_j$ is the Jensen--Shannon distance
+between the real and synthetic category distributions. As with SHAP, the
+feature values are max-normalized:
+
+\begin{equation}
+    \widehat{U}_j = U_j / \max_k U_k,
+\end{equation}
+
+with an all-zero result when the maximum is zero.
+
+\subsection{Tail and Rare-Outcome Deficit Signal}
+\label{subsec:tail_signal}
+
+For a continuous feature, the raw tail signal is the sum of one-sided deficits
+below the real audit 5th percentile and above its 95th percentile:
+
+\begin{equation}
+\begin{split}
+    T_j ={}& \max\!\left(0,
+        P_{\mathrm{audit}}(X_j\le q_{j,.05})
+        -P_{\mathrm{A0}}(X_j\le q_{j,.05})\right)\\
+        &+\max\!\left(0,
+        P_{\mathrm{audit}}(X_j\ge q_{j,.95})
+        -P_{\mathrm{A0}}(X_j\ge q_{j,.95})\right).
+\end{split}
+\label{eq:tail_deficit}
+\end{equation}
+
+For a categorical feature, the signal sums one-sided deficits for categories
+whose real audit frequency is at most 5\%. For the target feature, the minority
+class is included even if its frequency exceeds 5\%. The resulting feature
+signals are max-normalized to obtain $\widehat{T}_j$.
+
+The tail signal affects feature selection in A5. It is not an independent
+binary multiplier applied to every tail-region row.
+
+\section{Feature Prioritisation and Ablation Variants}
+\label{sec:feature_prioritisation}
+
+The three normalized feature signals are combined before any row weights are
+computed. For feature $j$, the implemented variant-specific score $C_j^{(a)}$
+is
+
+\begin{equation}
+    C_j^{(a)} =
+    \begin{cases}
+        \widehat{U}_j, & a=\mathrm{A2},\\
+        \widehat{I}_j, & a=\mathrm{A3},\\
+        0.625\widehat{I}_j+0.375\widehat{U}_j, & a=\mathrm{A4},\\
+        0.5\widehat{I}_j+0.3\widehat{U}_j+0.2\widehat{T}_j,
+            & a=\mathrm{A5}.
+    \end{cases}
+    \label{eq:variant_feature_score}
+\end{equation}
+
+The top $k=5$ features are selected using a stable descending sort. The
+selected scores are converted into feature priorities that sum to one:
+
+\begin{equation}
+    \rho_j^{(a)} =
+    \frac{C_j^{(a)}}{\sum_{k\in\mathcal{J}_a}C_k^{(a)}},
+    \qquad j\in\mathcal{J}_a,
+    \label{eq:feature_priority}
+\end{equation}
+
+where $\mathcal{J}_a$ denotes the selected feature set. Priorities are zero if
+the selected-score sum is zero. The code can optionally restrict selection to
+one feature per connected correlation group, defined by
+$|r|\ge 0.65$, but this option is disabled in the thesis configuration files.
+
+The six controlled variants are therefore:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Ablation variants implemented in the retraining runner.}
+    \label{tab:ablation_variants}
+    \begingroup
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{13mm}p{48mm}p{68mm}}
+        \hline
+        Variant & Training-data intervention & Purpose \\
+        \hline
+        A0 & No augmentation & Baseline generator \\
+        A1 & Uniform bootstrap augmentation & Controls for added data volume \\
+        A2 & Mismatch-prioritised weighting & Distribution mismatch only \\
+        A3 & TreeSHAP-prioritised weighting & Detector explanation only \\
+        A4 & $0.625$ SHAP $+0.375$ mismatch & Combined XAI and fidelity signal \\
+        A5 & $0.5$ SHAP $+0.3$ mismatch $+0.2$ tail & Adds tail/rare deficit signal \\
+        \hline
+    \end{tabular}
+    \endgroup
+\end{table}
+
+\section{Underrepresented-Region Modelling}
+\label{sec:region_modelling}
+
+Feature priorities identify \emph{which variables} should guide retraining.
+Region modelling identifies \emph{which values} of those variables are
+underrepresented. The same region definitions are used by A2--A5.
+
+For each continuous feature $j$, bin boundaries are obtained from the unique
+training-set quantiles at probabilities $0$, $0.05$, $0.25$, $0.75$, $0.95$,
+and $1$, with unbounded exterior intervals. Because the boundaries are learned
+from $D_{\mathrm{train}}$, the audit comparison does not redefine the support.
+For a categorical feature, each observed category, including an explicit
+missing-value category, forms a region.
+
+For region $r\in\mathcal{R}_j$, let $p^{\mathrm{audit}}_{jr}$ and
+$p^{\mathrm{A0}}_{jr}$ denote its frequencies in the real and synthetic audit
+samples. The implementation uses the absolute one-sided deficit
+
+\begin{equation}
+    d_{jr} = \max\left(0,
+        p^{\mathrm{audit}}_{jr}-p^{\mathrm{A0}}_{jr}\right).
+    \label{eq:region_deficit}
+\end{equation}
+
+No relative-frequency alternative is used. To make regions comparable within
+each feature, the deficits are divided by the largest deficit of that feature:
+
+\begin{equation}
+    g_{jr} =
+    \begin{cases}
+        d_{jr}/\max_{s\in\mathcal{R}_j}d_{js},
+            & \max_s d_{js}>0,\\
+        0, & \text{otherwise}.
+    \end{cases}
+    \label{eq:normalized_region_deficit}
+\end{equation}
+
+Consequently, $g_{jr}\in[0,1]$. A region receives a positive score only when
+it is less frequent in the A0 sample than in the real audit data; already
+matched or overrepresented regions receive zero.
+
+\section{Row Weighting and Bootstrap Augmentation}
+\label{sec:row_weighting}
+
+Let $r_j(\mathbf{x}_i)$ denote the region occupied by training row
+$\mathbf{x}_i$ for feature $j$. For weighted variant $a\in\{\mathrm{A2},
+\mathrm{A3},\mathrm{A4},\mathrm{A5}\}$, the row score is
+
+\begin{equation}
+    s_i^{(a)} = \sum_{j\in\mathcal{J}_a}
+        \rho_j^{(a)}g_{j,r_j(\mathbf{x}_i)}.
+    \label{eq:implemented_row_score}
+\end{equation}
+
+Because the non-negative feature priorities sum to one and the region scores
+lie in $[0,1]$, $s_i^{(a)}$ also lies in $[0,1]$. No additional division by
+the number of selected features or normalization by the largest observed row
+score is applied. The final weight is
+
+\begin{equation}
+    w_i^{(a)} = \min\left(1+\alpha s_i^{(a)},w_{\max}\right),
+    \label{eq:implemented_row_weight}
+\end{equation}
+
+with $\alpha=4$ and $w_{\max}=3$ in the thesis configurations. Sampling
+probabilities are
+
+\begin{equation}
+    \pi_i^{(a)} = \frac{w_i^{(a)}}{\sum_k w_k^{(a)}}.
+    \label{eq:implemented_sampling_probability}
+\end{equation}
+
+For every augmented variant, $\lfloor\gamma|D_{\mathrm{train}}|\rfloor$
+rows are sampled with replacement and appended to the complete original
+training partition. The configured augmentation ratio is $\gamma=0.6$.
+Variants A2--A5 sample according to Equation~\ref{eq:implemented_sampling_probability};
+A1 samples the same number of rows uniformly. The intervention therefore
+never removes a real training row. A weight of 1.3 represents a relative
+sampling propensity, not 1.3 deterministic copies of a record.
+
+\section{Generator Retraining}
+\label{sec:generator_retraining}
+
+Each A1--A5 dataset is used to fit a fresh instance of the selected generator.
+The fitted model then produces exactly $|D_{\mathrm{train}}|$ synthetic rows
+for evaluation, irrespective of the augmented training-set size. This keeps
+the number of evaluated synthetic records constant across variants.
+
+CTAB-GAN+ uses its mixed-type data transformer, convolutional generator and
+discriminator, conditional-vector loss, information loss, and auxiliary
+task-classifier loss. For MIMIC-IV it is trained for 150 epochs with batch size
+512, latent dimension 100, and 64 channels. For WiDS it is trained for 200
+epochs with batch size 1024, latent dimension 128, and 96 channels. CTGAN uses
+two 256-unit hidden layers in both generator and discriminator, a 128-dimensional
+embedding, one discriminator step, and packing degree 10. The DP-CGANS
+architecture uses three 128-unit hidden layers, ten discriminator steps, and
+packing degree 10, always in non-private mode. CTGAN and DP-CGANS use batch
+sizes 500 for MIMIC-IV and 1000 for WiDS, with 150 and 200 epochs,
+respectively.
+
+All adapters infer numeric measurement precision and finite training support
+from the rows fitted by that variant. Generated numeric values are restored to
+the fitted dataframe schema and rounded to the inferred measurement precision;
+raw pre-restoration samples and post-processing diagnostics are saved. For
+DP-CGANS ablations, A0 fits the transformer once from the original real
+training partition. A hash-validated frozen copy is reused by A1--A5, while
+each variant still transforms its own augmented rows, rebuilds its sampler,
+and trains a fresh GAN. This prevents transformer changes from becoming an
+uncontrolled source of variation.
+
+\section{Evaluation Protocol}
+\label{sec:evaluation_protocol}
+
+Every variant is compared with the same real validation or test partition.
+Evaluation has five complementary components.
+
+\begin{enumerate}
+    \item \textbf{Fidelity.} Continuous features are assessed using
+    Wasserstein distance, IQR-scaled Wasserstein distance, the
+    Kolmogorov--Smirnov statistic, and correlation-matrix distance.
+    Categorical features are assessed using Jensen--Shannon distance.
+
+    \item \textbf{Tail and rare-event coverage.} Continuous-feature lower and
+    upper quantile mass, scaled quantile error, and CDF-tail divergence are
+    measured. Rare-category frequency error and minority-outcome frequency
+    error are also retained.
+
+    \item \textbf{Downstream utility.} A class-balanced random forest is
+    trained on synthetic data and evaluated on untouched real data. The fixed
+    argmax decision rule is used without threshold tuning. Mortality is tested
+    both with the real training prevalence and with a 50/50 training balance.
+    ROC-AUC, PR-AUC, accuracy, balanced accuracy, macro precision, macro
+    recall, macro F1, and positive-class metrics are reported. Additional
+    additive and replacement curves measure utility for controlled mixtures of
+    real and synthetic training rows.
+
+    \item \textbf{Detectability.} A new real-versus-synthetic random forest is
+    fitted between the evaluation partition and each variant's synthetic data.
+    Lower separability, interpreted relative to the chance target of 0.5,
+    indicates improved realism.
+
+    \item \textbf{Privacy proxies.} Exact matches with the real training data
+    and nearest-neighbour distances from synthetic and held-out real records to
+    the real training set are reported. These are memorisation-risk indicators,
+    not formal privacy guarantees.
+\end{enumerate}
+
+The primary controlled reference is A0. Results therefore report A1--A5 minus
+A0 for fidelity, tail, utility, detector, and privacy-proxy measures. Utility
+is additionally compared with a real-only model trained on
+$D_{\mathrm{train}}$ and evaluated on the identical frozen split.
+
+\section{Internal-Discriminator Explanation Experiment}
+\label{sec:internal_discriminator_experiment}
+
+The internal-discriminator explanation experiment is separate from the
+XAI-guided reweighting framework described in
+Sections~\ref{sec:approach_overview}--\ref{sec:evaluation_protocol}. Its purpose
+is to investigate how the CTAB-GAN+ discriminator's decisions and feature
+attributions develop during adversarial training. Its outputs are not used to
+select features, define underrepresented regions, calculate row weights, or
+train any A0--A5 variant. The reweighting intervention relies exclusively on
+the post-hoc random-forest detector and its TreeSHAP explanations.
+
+\subsection{Snapshot Collection and Common Probe}
+
+CTAB-GAN+ discriminator snapshots are captured every 25 epochs in the
+MIMIC-IV configuration. Snapshot collection is disabled in the WiDS
+configuration. Each historical discriminator is evaluated against the same
+fixed, balanced probe constructed from held-out real audit records and records
+from the final generator of the analysed variant. Holding the probe constant
+isolates changes in the discriminator: the resulting trajectory shows how
+historical critics respond to one common final-generator sample and is not an
+epoch-matched generator--discriminator comparison.
+
+The probe is divided into disjoint calibration and holdout partitions. A
+real-versus-synthetic decision threshold is selected only on the calibration
+partition by maximising Youden's $J$ statistic and is subsequently applied to
+the holdout partition. Threshold-independent ROC-AUC and average precision are
+reported alongside threshold-dependent classification outcomes.
+
+\subsection{GradientSHAP Analysis}
+
+GradientSHAP explanations are computed separately for four holdout outcome
+groups: correctly classified real records, real records classified as
+synthetic, correctly classified synthetic records, and synthetic records
+classified as real. Valid CTAB-GAN+ conditional vectors are sampled and
+marginalised over eight draws instead of evaluating the discriminator with an
+out-of-distribution all-zero condition. The experiment uses up to 50
+calibration records as the explanation background and up to 100 holdout records
+per explanation scope.
+
+The principal cross-model comparison uses the correctly classified synthetic
+group, which matches the scope of the post-hoc detector's TreeSHAP analysis.
+For every snapshot, the experiment stores discriminator metrics, row-level
+outcomes, signed and absolute feature attributions, and feature-attribution
+trajectories. At the final snapshot, the GradientSHAP ranking is compared with
+the post-hoc random-forest TreeSHAP ranking. This comparison assesses agreement
+between internal and external explanations; it does not feed information back
+into generator retraining.
+
+\section{Implementation Details and Reproducibility}
+\label{sec:implementation_details}
+
+The framework is implemented in Python. Data manipulation uses pandas and
+NumPy; statistical distances use SciPy; preprocessing, random forests,
+stratified splitting, and nearest-neighbour analysis use scikit-learn;
+explanations use SHAP's \texttt{TreeExplainer}; and the GAN implementations use
+PyTorch. The standalone generator dependencies are CTGAN 0.12.1 and DP-CGANS
+0.2.0. Experiments are launched through the
+\texttt{xai\_reweighting.run\_ablation} command-line runner or its Jupyter
+orchestration notebook.
+
+Random seeds are propagated to Python, NumPy, and PyTorch. Deterministic
+execution is enabled, TF32 is disabled in the thesis configurations, and the
+selected device is recorded. Configuration, source-data, and code hashes form
+a run fingerprint. Split indices, feature scores, region definitions, row
+weights, augmentation counts, synthetic datasets, model checkpoints, training
+histories, convergence diagnostics, and metric files are written to the run
+directory. Writes are atomic, and resuming a run is permitted only when the
+stored fingerprint matches the current configuration, data, and code.
+
+CTAB-GAN+'s continuous-column mixture preprocessing retries a non-converged fit
+and stops if convergence still fails. Non-finite losses or model parameters also stop
+the experiment. These checks prevent failed training runs from silently
+entering the variant comparison.
