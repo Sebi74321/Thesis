@@ -552,6 +552,8 @@ def _save_discriminator_shap_artifacts(
         explain_size=int(shap_config.get("explain_size", 100)),
         test_size=float(config.get("detector", {}).get("test_size", 0.3)),
         condition_samples=int(shap_config.get("condition_samples", 8)),
+        bootstrap_repeats=int(shap_config.get("bootstrap_repeats", 200)),
+        late_window_snapshots=int(shap_config.get("late_window_snapshots", 3)),
         seed=int(shap_config.get("seed", seed)),
         exclude_features=excluded,
     )
@@ -562,6 +564,27 @@ def _save_discriminator_shap_artifacts(
     predictions_name = f"discriminator_snapshot_predictions_{variant}.csv"
     atomic_write_csv(output_dir / metrics_name, evaluation.metrics)
     atomic_write_csv(output_dir / predictions_name, evaluation.predictions)
+    epoch_matched_metrics_name = (
+        f"discriminator_snapshot_epoch_matched_metrics_{variant}.csv"
+    )
+    epoch_matched_predictions_name = (
+        f"discriminator_snapshot_epoch_matched_predictions_{variant}.csv"
+    )
+    late_window_name = f"discriminator_snapshot_late_window_{variant}.csv"
+    stability_name = f"discriminator_shap_stability_{variant}.csv"
+    atomic_write_csv(
+        output_dir / epoch_matched_metrics_name,
+        evaluation.epoch_matched_metrics,
+    )
+    atomic_write_csv(
+        output_dir / epoch_matched_predictions_name,
+        evaluation.epoch_matched_predictions,
+    )
+    atomic_write_csv(
+        output_dir / late_window_name,
+        evaluation.late_window_summary,
+    )
+    atomic_write_csv(output_dir / stability_name, evaluation.shap_stability)
     metadata = {
         "variant": variant,
         "backend": generator_name,
@@ -581,6 +604,10 @@ def _save_discriminator_shap_artifacts(
             "historical_discriminator_snapshots_evaluated_against_a_fixed_"
             "final_generator_probe"
         ),
+        "epoch_matched_interpretation": (
+            "each_historical_discriminator_evaluated_against_the_generator_"
+            "saved_at_the_same_epoch_using_shared_latent_and_condition_draws"
+        ),
         "probe_split": "calibration_and_stratified_holdout",
         "threshold": "calibration_only_youden_j",
         "primary_scope": "correct_synthetic_holdout_only",
@@ -592,10 +619,23 @@ def _save_discriminator_shap_artifacts(
         ],
         "conditional_vector": "marginalized_valid_sampled_conditions",
         "condition_samples": int(shap_config.get("condition_samples", 8)),
+        "bootstrap_repeats": int(shap_config.get("bootstrap_repeats", 200)),
+        "late_window_snapshots": int(
+            shap_config.get("late_window_snapshots", 3)
+        ),
+        "convergence_warning": (
+            "chance_accuracy_or_auc_alone_is_not_convergence;_interpret_"
+            "orientation_free_separability,_class_recalls,_score_gaps,_late_"
+            "window_stability,_and_the_external_detector_together"
+        ),
         "aggregation": "signed_encoded_sum_then_mean_absolute_by_original_feature",
         "artifact": csv_name,
         "metrics_artifact": metrics_name,
         "predictions_artifact": predictions_name,
+        "epoch_matched_metrics_artifact": epoch_matched_metrics_name,
+        "epoch_matched_predictions_artifact": epoch_matched_predictions_name,
+        "late_window_artifact": late_window_name,
+        "shap_stability_artifact": stability_name,
     }
     atomic_write_json(output_dir / f"discriminator_shap_{variant}.json", metadata)
     return metadata
@@ -607,8 +647,9 @@ def _save_discriminator_detector_comparison(
     detector_importance: pd.Series,
     detector_signed: pd.Series,
     top_k: int,
+    late_window_snapshots: int = 3,
 ) -> None:
-    """Compare like-scoped post-hoc and final-snapshot feature importance."""
+    """Compare post-hoc SHAP with late-window internal-discriminator SHAP."""
     trajectory_path = output_dir / f"discriminator_shap_{variant}.csv"
     if not trajectory_path.is_file():
         return
@@ -620,9 +661,17 @@ def _save_discriminator_detector_comparison(
     ].copy()
     if primary.empty:
         return
-    final_epoch = int(pd.to_numeric(primary["epoch"]).max())
-    primary = primary[pd.to_numeric(primary["epoch"]) == final_epoch].copy()
-    snapshot = primary.set_index("feature")
+    snapshot_epochs = sorted(
+        pd.to_numeric(primary["epoch"], errors="coerce").dropna().astype(int).unique()
+    )
+    snapshot_epochs = snapshot_epochs[
+        -min(max(1, int(late_window_snapshots)), len(snapshot_epochs)):
+    ]
+    primary = primary[pd.to_numeric(primary["epoch"]).isin(snapshot_epochs)].copy()
+    snapshot = primary.groupby("feature", sort=False).agg(
+        importance_share=("importance_share", "mean"),
+        mean_signed_shap=("mean_signed_shap", "mean"),
+    )
     features = list(
         dict.fromkeys(
             [*detector_importance.index.astype(str), *snapshot.index.astype(str)]
@@ -679,7 +728,8 @@ def _save_discriminator_detector_comparison(
         output_dir / f"discriminator_detector_shap_comparison_{variant}.json",
         {
             "variant": variant,
-            "snapshot_epoch": final_epoch,
+            "snapshot_epochs": snapshot_epochs,
+            "snapshot_window_size": len(snapshot_epochs),
             "shared_scope": "correct_synthetic_holdout_only",
             "detector_method": "TreeSHAP",
             "snapshot_method": "GradientExplainer",
@@ -773,6 +823,12 @@ def run_experiment(
         if int(snapshot_shap.get("seed", seed)) != seed:
             raise ValueError(
                 "Comparable detector and discriminator SHAP must use the run seed"
+            )
+        if int(snapshot_shap.get("bootstrap_repeats", 200)) < 0:
+            raise ValueError("discriminator_shap.bootstrap_repeats cannot be negative")
+        if int(snapshot_shap.get("late_window_snapshots", 3)) < 2:
+            raise ValueError(
+                "discriminator_shap.late_window_snapshots must be at least two"
             )
     if smoke:
         config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
@@ -1019,6 +1075,7 @@ def run_experiment(
         audit_result.shap_importance,
         audit_result.shap_signed,
         int(config.get("weighting", {}).get("top_k", 5)),
+        int(config.get("discriminator_shap", {}).get("late_window_snapshots", 3)),
     )
     diagnostics_cfg = config.get("baseline_diagnostics", {})
     if diagnostics_cfg.get("enabled", True):

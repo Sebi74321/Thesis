@@ -1,0 +1,44 @@
+\begin{table}[htbp]
+    \centering
+    \caption{Fidelity of the synthetic datasets on the real evaluation set.
+    Values are reported as mean $\pm$ standard deviation across three
+    independently trained generator seeds.}
+    \label{tab:rq1_fidelity}
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabular}{lcccc}
+        \toprule
+        Generator
+            & Wasserstein (scaled) $\downarrow$
+            & Jensen--Shannon $\downarrow$
+            & Correlation $\downarrow$
+            & Detector AUC $\rightarrow 0.5$ \\
+        \midrule
+        CTAB-GAN+
+            & $\mathbf{0.1113 \pm 0.0083}$
+            & $\mathbf{0.0063 \pm 0.0016}$
+            & $\mathbf{0.0434 \pm 0.0003}$
+            & $\mathbf{0.8968 \pm 0.0316}$ \\
+        CTGAN
+            & $0.2554 \pm 0.0314$
+            & $0.1080 \pm 0.0126$
+            & $0.1823 \pm 0.0049$
+            & $0.9923 \pm 0.0018$ \\
+        DP-CGANS
+            & $0.1689 \pm 0.0239$
+            & $0.0911 \pm 0.0134$
+            & $0.1054 \pm 0.0025$
+            & $0.9501 \pm 0.0151$ \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2mm}
+    \begin{minipage}{0.96\linewidth}
+        \footnotesize
+        \textit{Notes:} Bold values indicate the best mean for each metric.
+        Lower values are better for the three distance metrics. Detector AUC
+        is evaluated by proximity to 0.5, which represents chance-level
+        real-versus-synthetic discrimination. DP-CGANS was evaluated in
+        non-private mode.
+    \end{minipage}
+\end{table}

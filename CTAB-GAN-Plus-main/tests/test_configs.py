@@ -69,6 +69,8 @@ def test_mimic_age_is_general_and_integer():
         "background_size": 50,
         "explain_size": 100,
         "condition_samples": 8,
+        "bootstrap_repeats": 200,
+        "late_window_snapshots": 3,
         "exclude_target": False,
     }
 

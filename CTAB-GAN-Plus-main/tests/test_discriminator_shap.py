@@ -10,10 +10,35 @@ from model.synthesizer.transformer import ImageTransformer
 from xai_reweighting.discriminator_shap import (
     DiscriminatorTabularWrapper,
     _encode_probe,
+    _snapshot_metric_row,
     aggregate_encoded_shap,
     encoded_feature_slices,
     evaluate_discriminator_snapshots,
 )
+
+
+def test_snapshot_metrics_distinguish_one_class_collapse_from_convergence():
+    truth = np.array([1, 1, 0, 0])
+    scores = np.zeros(4)
+    predictions = np.zeros(4, dtype=int)
+
+    row, _ = _snapshot_metric_row(
+        epoch=25,
+        truth=truth,
+        scores=scores,
+        predictions=predictions,
+        threshold=1.0,
+        calibration_rows=4,
+        bootstrap_repeats=10,
+        seed=42,
+    )
+
+    assert row["accuracy"] == 0.5
+    assert row["balanced_accuracy"] == 0.5
+    assert row["orientation_free_separability"] == 0.0
+    assert row["real_recall"] == 0.0
+    assert row["synthetic_recall"] == 1.0
+    assert row["predicted_real_fraction"] == 0.0
 
 
 class IdentityTabularTransformer:
@@ -216,6 +241,13 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
         "_critic_scores",
         lambda wrapper, encoded, device: encoded[:, 0].astype(float),
     )
+    monkeypatch.setattr(
+        discriminator_shap_module,
+        "_generate_snapshot_encoded",
+        lambda snapshot, synthesizer, noise, conditions, device, seed: np.column_stack(
+            [-np.full(len(noise), 10.0), np.resize([0.0, 1.0], len(noise))]
+        ).astype(np.float32),
+    )
     discriminator = Discriminator(4, determine_layers_disc(4, 2))
     state = {
         key: value.detach().cpu().clone()
@@ -239,8 +271,8 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
             label_encoder_list=[],
         ),
         discriminator_snapshots=[
-            {"epoch": 25, "state_dict": state},
-            {"epoch": 50, "state_dict": state},
+            {"epoch": 25, "state_dict": state, "generator_state_dict": {}},
+            {"epoch": 50, "state_dict": state, "generator_state_dict": {}},
         ],
         device="cpu",
     )
@@ -280,6 +312,15 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
         "correct_synthetic",
     }
     assert (evaluation.metrics["balanced_accuracy"] == 1.0).all()
+    assert (evaluation.metrics["orientation_free_separability"] == 1.0).all()
+    assert (evaluation.metrics["real_recall"] == 1.0).all()
+    assert (evaluation.metrics["synthetic_recall"] == 1.0).all()
+    assert (evaluation.epoch_matched_metrics["balanced_accuracy"] == 1.0).all()
+    assert set(evaluation.late_window_summary["probe_mode"]) == {
+        "fixed_final_generator",
+        "epoch_matched_generator",
+    }
+    assert evaluation.shap_stability.iloc[0]["top_k_jaccard"] == 1.0
     assert np.array_equal(
         FakeGradientExplainer.backgrounds[0], FakeGradientExplainer.backgrounds[1]
     )

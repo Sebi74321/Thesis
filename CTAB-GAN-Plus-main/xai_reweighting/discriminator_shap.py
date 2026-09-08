@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
+from scipy.stats import ks_2samp, wasserstein_distance
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -25,7 +26,10 @@ from sklearn.metrics import (
 
 from model.synthesizer.ctabgan_synthesizer import (
     Discriminator,
+    Generator,
+    apply_activate,
     determine_layers_disc,
+    determine_layers_gen,
 )
 from .detector import (
     OUTCOME_GROUPS,
@@ -59,7 +63,30 @@ METRIC_COLUMNS = [
     "average_precision",
     "accuracy",
     "balanced_accuracy",
+    "orientation_free_separability",
+    "real_recall",
+    "synthetic_recall",
+    "predicted_real_fraction",
+    "real_score_mean",
+    "synthetic_score_mean",
+    "score_mean_gap",
+    "standardized_score_mean_gap",
+    "score_ks_statistic",
+    "score_wasserstein_scaled",
+    "auc_bootstrap_ci_low",
+    "auc_bootstrap_ci_high",
     *[f"rows_{group}" for group in OUTCOME_GROUPS],
+]
+
+LATE_WINDOW_COLUMNS = [
+    "probe_mode",
+    "window_snapshots",
+    "first_epoch",
+    "last_epoch",
+    "metric",
+    "mean",
+    "std",
+    "slope_per_epoch",
 ]
 
 
@@ -68,6 +95,10 @@ class DiscriminatorSnapshotEvaluation:
     trajectory: pd.DataFrame
     metrics: pd.DataFrame
     predictions: pd.DataFrame
+    epoch_matched_metrics: pd.DataFrame
+    epoch_matched_predictions: pd.DataFrame
+    late_window_summary: pd.DataFrame
+    shap_stability: pd.DataFrame
 
 
 class DiscriminatorTabularWrapper(torch.nn.Module):
@@ -257,6 +288,25 @@ def reconstruct_discriminator(snapshot: Mapping[str, Any], synthesizer, device) 
     discriminator.load_state_dict(snapshot["state_dict"])
     discriminator.eval()
     return discriminator
+
+
+def reconstruct_generator(snapshot: Mapping[str, Any], synthesizer, device) -> Generator:
+    """Recreate the generator paired with a discriminator snapshot."""
+    if "generator_state_dict" not in snapshot or "epoch" not in snapshot:
+        raise ValueError(
+            "Epoch-matched evaluation requires snapshots containing epoch and "
+            "generator_state_dict"
+        )
+    if synthesizer.gside is None:
+        raise ValueError("The fitted CTAB+ synthesizer has no generator side length")
+    input_dim = int(synthesizer.random_dim) + int(synthesizer.cond_generator.n_opt)
+    layers = determine_layers_gen(
+        int(synthesizer.gside), input_dim, int(synthesizer.num_channels)
+    )
+    generator = Generator(int(synthesizer.gside), layers).to(device)
+    generator.load_state_dict(snapshot["generator_state_dict"])
+    generator.eval()
+    return generator
 
 
 def _prepare_probe_frame(adapter, frame: pd.DataFrame) -> pd.DataFrame:
@@ -454,6 +504,246 @@ def _calibrated_threshold(truth: np.ndarray, scores: np.ndarray) -> float:
     return float(thresholds[int(np.argmax(objective))])
 
 
+def _fixed_generator_inputs(synthesizer, count: int, seed: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Create one CPU latent/condition probe reused at every saved epoch."""
+    if count <= 0:
+        raise ValueError("Epoch-matched generator probe size must be positive")
+    torch_generator = torch.Generator(device="cpu")
+    torch_generator.manual_seed(int(seed))
+    noise = torch.randn(
+        count, int(synthesizer.random_dim), generator=torch_generator, dtype=torch.float32
+    )
+    n_opt = int(synthesizer.cond_generator.n_opt)
+    if n_opt:
+        numpy_state = np.random.get_state()
+        try:
+            np.random.seed(int(seed) % (2**32))
+            condition_array = np.asarray(
+                synthesizer.cond_generator.sample(count), dtype=np.float32
+            )
+        finally:
+            np.random.set_state(numpy_state)
+        conditions = torch.from_numpy(condition_array)
+    else:
+        conditions = torch.empty((count, 0), dtype=torch.float32)
+    return noise, conditions
+
+
+def _generate_snapshot_encoded(
+    snapshot: Mapping[str, Any],
+    synthesizer,
+    noise: torch.Tensor,
+    conditions: torch.Tensor,
+    device,
+    batch_size: int = 1024,
+    seed: int = 42,
+) -> np.ndarray:
+    """Generate encoded rows from the generator saved at the same epoch."""
+    generator = reconstruct_generator(snapshot, synthesizer, device)
+    outputs = []
+    cuda_devices = []
+    if torch.device(device).type == "cuda":
+        cuda_devices = [torch.device(device).index or 0]
+    with torch.random.fork_rng(devices=cuda_devices):
+        # apply_activate uses Gumbel-softmax, so fixing only the latent vector
+        # would not provide a genuinely shared stochastic probe.
+        torch.manual_seed(int(seed))
+        with torch.no_grad():
+            for start in range(0, len(noise), int(batch_size)):
+                latent = noise[start:start + int(batch_size)].to(device)
+                condition_batch = conditions[start:start + int(batch_size)].to(device)
+                if condition_batch.shape[1]:
+                    latent = torch.cat([latent, condition_batch], dim=1)
+                latent = latent.reshape(latent.shape[0], latent.shape[1], 1, 1)
+                generated = generator(latent)
+                generated = synthesizer.Gtransformer.inverse_transform(generated)
+                outputs.append(
+                    apply_activate(generated, synthesizer.transformer.output_info)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+    del generator
+    encoded = np.concatenate(outputs, axis=0).astype(np.float32, copy=False)
+    if encoded.ndim != 2 or len(encoded) != len(noise) or not np.isfinite(encoded).all():
+        raise ValueError("A generator snapshot produced an invalid encoded probe")
+    return encoded
+
+
+def _bootstrap_auc_interval(
+    truth: np.ndarray,
+    scores: np.ndarray,
+    *,
+    repeats: int,
+    seed: int,
+) -> tuple[float, float]:
+    """Return a deterministic stratified percentile interval for ROC-AUC."""
+    if repeats <= 0:
+        return np.nan, np.nan
+    truth = np.asarray(truth, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+    negative = np.flatnonzero(truth == 0)
+    positive = np.flatnonzero(truth == 1)
+    if not len(negative) or not len(positive):
+        return np.nan, np.nan
+    rng = np.random.default_rng(int(seed))
+    estimates = np.empty(int(repeats), dtype=float)
+    for index in range(int(repeats)):
+        sampled = np.concatenate(
+            [
+                rng.choice(negative, len(negative), replace=True),
+                rng.choice(positive, len(positive), replace=True),
+            ]
+        )
+        estimates[index] = roc_auc_score(truth[sampled], scores[sampled])
+    low, high = np.quantile(estimates, [0.025, 0.975])
+    return float(low), float(high)
+
+
+def _snapshot_metric_row(
+    *,
+    epoch: int,
+    truth: np.ndarray,
+    scores: np.ndarray,
+    predictions: np.ndarray,
+    threshold: float,
+    calibration_rows: int,
+    bootstrap_repeats: int,
+    seed: int,
+) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
+    groups = outcome_group_masks(truth, predictions)
+    auc = float(roc_auc_score(truth, scores))
+    real_scores = scores[truth == 1]
+    synthetic_scores = scores[truth == 0]
+    real_std = float(np.std(real_scores, ddof=0))
+    synthetic_std = float(np.std(synthetic_scores, ddof=0))
+    pooled_scale = float(np.sqrt((real_std**2 + synthetic_std**2) / 2.0))
+    if not np.isfinite(pooled_scale) or pooled_scale <= 0:
+        pooled_scale = 1.0
+    mean_gap = float(np.mean(real_scores) - np.mean(synthetic_scores))
+    ci_low, ci_high = _bootstrap_auc_interval(
+        truth,
+        scores,
+        repeats=int(bootstrap_repeats),
+        seed=int(seed) + int(epoch),
+    )
+    real_total = max(1, int((truth == 1).sum()))
+    synthetic_total = max(1, int((truth == 0).sum()))
+    row = {
+        "epoch": int(epoch),
+        "calibration_rows": int(calibration_rows),
+        "holdout_rows": int(len(truth)),
+        "threshold": float(threshold),
+        "auc": auc,
+        "average_precision": float(average_precision_score(truth, scores)),
+        "accuracy": float(accuracy_score(truth, predictions)),
+        "balanced_accuracy": float(balanced_accuracy_score(truth, predictions)),
+        "orientation_free_separability": float(2.0 * abs(auc - 0.5)),
+        "real_recall": float(groups["correct_real"].sum() / real_total),
+        "synthetic_recall": float(groups["correct_synthetic"].sum() / synthetic_total),
+        "predicted_real_fraction": float(np.mean(predictions == 1)),
+        "real_score_mean": float(np.mean(real_scores)),
+        "synthetic_score_mean": float(np.mean(synthetic_scores)),
+        "score_mean_gap": mean_gap,
+        "standardized_score_mean_gap": float(mean_gap / pooled_scale),
+        "score_ks_statistic": float(ks_2samp(real_scores, synthetic_scores).statistic),
+        "score_wasserstein_scaled": float(
+            wasserstein_distance(real_scores, synthetic_scores) / pooled_scale
+        ),
+        "auc_bootstrap_ci_low": ci_low,
+        "auc_bootstrap_ci_high": ci_high,
+        **{f"rows_{group}": int(mask.sum()) for group, mask in groups.items()},
+    }
+    return row, groups
+
+
+def summarize_late_window(
+    metrics: pd.DataFrame,
+    *,
+    probe_mode: str,
+    window_snapshots: int,
+) -> pd.DataFrame:
+    """Summarize level, variability, and slope across the last snapshots."""
+    if metrics.empty:
+        return pd.DataFrame(columns=LATE_WINDOW_COLUMNS)
+    count = min(max(2, int(window_snapshots)), len(metrics))
+    window = metrics.sort_values("epoch", kind="mergesort").tail(count)
+    epochs = pd.to_numeric(window["epoch"], errors="coerce").to_numpy(dtype=float)
+    tracked = [
+        "auc",
+        "orientation_free_separability",
+        "average_precision",
+        "balanced_accuracy",
+        "real_recall",
+        "synthetic_recall",
+        "predicted_real_fraction",
+        "standardized_score_mean_gap",
+        "score_ks_statistic",
+        "score_wasserstein_scaled",
+    ]
+    rows = []
+    for metric in tracked:
+        values = pd.to_numeric(window[metric], errors="coerce").to_numpy(dtype=float)
+        finite = np.isfinite(values) & np.isfinite(epochs)
+        if not finite.any():
+            continue
+        slope = 0.0
+        if finite.sum() >= 2 and np.ptp(epochs[finite]) > 0:
+            slope = float(np.polyfit(epochs[finite], values[finite], 1)[0])
+        rows.append(
+            {
+                "probe_mode": str(probe_mode),
+                "window_snapshots": int(count),
+                "first_epoch": int(window["epoch"].min()),
+                "last_epoch": int(window["epoch"].max()),
+                "metric": metric,
+                "mean": float(np.mean(values[finite])),
+                "std": float(np.std(values[finite], ddof=0)),
+                "slope_per_epoch": slope,
+            }
+        )
+    return pd.DataFrame(rows, columns=LATE_WINDOW_COLUMNS)
+
+
+def summarize_shap_stability(
+    trajectory: pd.DataFrame,
+    *,
+    window_snapshots: int,
+    top_k: int = 5,
+) -> pd.DataFrame:
+    """Compare feature rankings between adjacent late-window snapshots."""
+    primary = trajectory[trajectory["primary_scope"].astype(bool)].copy()
+    if primary.empty:
+        return pd.DataFrame(
+            columns=["epoch_from", "epoch_to", "spearman", "top_k_jaccard"]
+        )
+    epochs = sorted(pd.to_numeric(primary["epoch"], errors="coerce").dropna().astype(int).unique())
+    epochs = epochs[-min(max(2, int(window_snapshots)), len(epochs)):]
+    rows = []
+    for epoch_from, epoch_to in zip(epochs[:-1], epochs[1:]):
+        left = primary[primary["epoch"] == epoch_from].set_index("feature")
+        right = primary[primary["epoch"] == epoch_to].set_index("feature")
+        features = sorted(set(left.index) | set(right.index))
+        left_values = left["importance_share"].reindex(features, fill_value=0.0)
+        right_values = right["importance_share"].reindex(features, fill_value=0.0)
+        correlation = left_values.corr(right_values, method="spearman")
+        count = min(int(top_k), len(features))
+        left_top = set(left_values.nlargest(count).index)
+        right_top = set(right_values.nlargest(count).index)
+        union = left_top | right_top
+        rows.append(
+            {
+                "epoch_from": int(epoch_from),
+                "epoch_to": int(epoch_to),
+                "spearman": float(correlation) if np.isfinite(correlation) else np.nan,
+                "top_k": int(count),
+                "top_k_overlap_count": int(len(left_top & right_top)),
+                "top_k_jaccard": float(len(left_top & right_top) / len(union)) if union else 0.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def evaluate_discriminator_snapshots(
     adapter,
     real_probe: pd.DataFrame,
@@ -463,6 +753,8 @@ def evaluate_discriminator_snapshots(
     explain_size: int = 100,
     test_size: float = 0.3,
     condition_samples: int = 8,
+    bootstrap_repeats: int = 200,
+    late_window_snapshots: int = 3,
     seed: int = 42,
     exclude_features: Iterable[str] = (),
 ) -> DiscriminatorSnapshotEvaluation:
@@ -523,10 +815,25 @@ def evaluate_discriminator_snapshots(
     except ImportError as exc:  # pragma: no cover - dependency error is environment-specific
         raise RuntimeError("SHAP is required for discriminator snapshot evaluation") from exc
 
+    ordered_snapshots = sorted(snapshots, key=lambda item: int(item["epoch"]))
+    epoch_matched_available = all(
+        "generator_state_dict" in snapshot for snapshot in ordered_snapshots
+    )
+    paired_noise = paired_conditions = None
+    paired_real_encoded = None
+    if epoch_matched_available:
+        rows_per_source = len(truth) // 2
+        paired_real_encoded = encoded[:rows_per_source]
+        paired_noise, paired_conditions = _fixed_generator_inputs(
+            synthesizer, rows_per_source, int(seed) + 7919
+        )
+
     results = []
     metric_rows = []
     prediction_rows = []
-    for snapshot in sorted(snapshots, key=lambda item: int(item["epoch"])):
+    epoch_matched_metric_rows = []
+    epoch_matched_prediction_rows = []
+    for snapshot in ordered_snapshots:
         epoch = int(snapshot["epoch"])
         discriminator = reconstruct_discriminator(snapshot, synthesizer, device)
         wrapper = DiscriminatorTabularWrapper(
@@ -542,29 +849,17 @@ def evaluate_discriminator_snapshots(
         holdout_truth = truth[holdout_indices]
         holdout_scores = scores[holdout_indices]
         holdout_predictions = (holdout_scores >= threshold).astype(int)
-        groups = outcome_group_masks(holdout_truth, holdout_predictions)
-        metric_rows.append(
-            {
-                "epoch": epoch,
-                "calibration_rows": int(len(calibration_indices)),
-                "holdout_rows": int(len(holdout_indices)),
-                "threshold": threshold,
-                "auc": float(roc_auc_score(holdout_truth, holdout_scores)),
-                "average_precision": float(
-                    average_precision_score(holdout_truth, holdout_scores)
-                ),
-                "accuracy": float(
-                    accuracy_score(holdout_truth, holdout_predictions)
-                ),
-                "balanced_accuracy": float(
-                    balanced_accuracy_score(holdout_truth, holdout_predictions)
-                ),
-                **{
-                    f"rows_{group}": int(mask.sum())
-                    for group, mask in groups.items()
-                },
-            }
+        metric_row, groups = _snapshot_metric_row(
+            epoch=epoch,
+            truth=holdout_truth,
+            scores=holdout_scores,
+            predictions=holdout_predictions,
+            threshold=threshold,
+            calibration_rows=len(calibration_indices),
+            bootstrap_repeats=bootstrap_repeats,
+            seed=seed,
         )
+        metric_rows.append(metric_row)
         group_for_row = np.full(len(holdout_indices), "", dtype=object)
         for group, mask in groups.items():
             group_for_row[mask] = group
@@ -587,6 +882,60 @@ def evaluate_discriminator_snapshots(
                 group_for_row,
             )
         )
+
+        if epoch_matched_available:
+            historical_synthetic = _generate_snapshot_encoded(
+                snapshot,
+                synthesizer,
+                paired_noise,
+                paired_conditions,
+                device,
+                seed=int(seed) + 15485863,
+            )
+            paired_encoded = np.concatenate(
+                [paired_real_encoded, historical_synthetic], axis=0
+            )
+            paired_scores = _critic_scores(wrapper, paired_encoded, device)
+            paired_threshold = _calibrated_threshold(
+                truth[calibration_indices], paired_scores[calibration_indices]
+            )
+            paired_holdout_scores = paired_scores[holdout_indices]
+            paired_predictions = (
+                paired_holdout_scores >= paired_threshold
+            ).astype(int)
+            paired_row, paired_groups = _snapshot_metric_row(
+                epoch=epoch,
+                truth=holdout_truth,
+                scores=paired_holdout_scores,
+                predictions=paired_predictions,
+                threshold=paired_threshold,
+                calibration_rows=len(calibration_indices),
+                bootstrap_repeats=bootstrap_repeats,
+                seed=seed + 104729,
+            )
+            epoch_matched_metric_rows.append(paired_row)
+            paired_group_for_row = np.full(len(holdout_indices), "", dtype=object)
+            for group, mask in paired_groups.items():
+                paired_group_for_row[mask] = group
+            epoch_matched_prediction_rows.extend(
+                {
+                    "epoch": epoch,
+                    "probe_row": int(probe_index),
+                    "source": "real" if row_truth == 1 else "synthetic",
+                    "truth_is_real": int(row_truth),
+                    "predicted_is_real": int(row_prediction),
+                    "critic_score": float(row_score),
+                    "threshold": paired_threshold,
+                    "outcome_group": str(group),
+                }
+                for probe_index, row_truth, row_prediction, row_score, group in zip(
+                    holdout_indices,
+                    holdout_truth,
+                    paired_predictions,
+                    paired_holdout_scores,
+                    paired_group_for_row,
+                )
+            )
         explainer = shap.GradientExplainer(wrapper, background)
         for group_position, group in enumerate(OUTCOME_GROUPS):
             candidate_positions = np.flatnonzero(groups[group])
@@ -642,8 +991,34 @@ def evaluate_discriminator_snapshots(
         if results
         else pd.DataFrame(columns=RESULT_COLUMNS)
     )
+    fixed_metrics = pd.DataFrame(metric_rows, columns=METRIC_COLUMNS)
+    epoch_matched_metrics = pd.DataFrame(
+        epoch_matched_metric_rows, columns=METRIC_COLUMNS
+    )
+    late_summaries = [
+        summarize_late_window(
+            fixed_metrics,
+            probe_mode="fixed_final_generator",
+            window_snapshots=late_window_snapshots,
+        )
+    ]
+    if not epoch_matched_metrics.empty:
+        late_summaries.append(
+            summarize_late_window(
+                epoch_matched_metrics,
+                probe_mode="epoch_matched_generator",
+                window_snapshots=late_window_snapshots,
+            )
+        )
     return DiscriminatorSnapshotEvaluation(
         trajectory=trajectory,
-        metrics=pd.DataFrame(metric_rows, columns=METRIC_COLUMNS),
+        metrics=fixed_metrics,
         predictions=pd.DataFrame(prediction_rows),
+        epoch_matched_metrics=epoch_matched_metrics,
+        epoch_matched_predictions=pd.DataFrame(epoch_matched_prediction_rows),
+        late_window_summary=pd.concat(late_summaries, ignore_index=True),
+        shap_stability=summarize_shap_stability(
+            trajectory,
+            window_snapshots=late_window_snapshots,
+        ),
     )

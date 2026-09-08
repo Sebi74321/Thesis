@@ -630,13 +630,24 @@ class CTABGANSynthesizer:
                     classifier_updates += 1
                                 
             epoch += 1
-            if self.snapshot_frq and epoch % self.snapshot_frq == 0:
+            if self.snapshot_frq and (
+                epoch % self.snapshot_frq == 0 or epoch == self.epochs
+            ):
                 snapshot = {
                     "epoch": epoch,
                     "state_dict": {
                         key: value.detach().cpu().clone()
                         for key, value in discriminator.state_dict().items()
-                    }
+                    },
+                    # Keep the generator from the same epoch as the
+                    # discriminator.  A discriminator-only trajectory tested
+                    # against the final generator measures critic drift, not
+                    # GAN convergence.  CPU clones avoid retaining GPU memory
+                    # for the remainder of a long training run.
+                    "generator_state_dict": {
+                        key: value.detach().cpu().clone()
+                        for key, value in self.generator.state_dict().items()
+                    },
                 }
             
                 discriminator_snap.append(snapshot)

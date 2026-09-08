@@ -1,0 +1,133 @@
+\chapter{Introduction}
+\label{chap:introduction}
+
+\section{Context and Motivation}
+
+Clinical research increasingly relies on information collected during routine
+patient care. In an \gls{icu}, a single admission can produce demographic
+information, repeated vital-sign measurements, laboratory results, diagnoses,
+and an eventual clinical outcome. Combined as \gls{ehr}, these observations
+are valuable for studying patient populations and developing predictive
+models. Their sensitivity, however, means that access and reuse must be
+carefully controlled. This can make suitable research datasets difficult to
+obtain, while uncommon outcomes may be represented by relatively few patients
+even in an available dataset.
+
+Synthetic records provide one possible complement to restricted real data. A
+model is fitted to an observed cohort and then sampled to create new,
+artificial records that approximate characteristics of that cohort. Research
+on synthetic \gls{ehr} has demonstrated the potential of this approach for
+producing realistic health data without directly distributing the source
+records \cite{Yoon2023_EHRSafe}. This does not make synthetic data inherently
+anonymous, clinically valid, or useful. Those properties depend on what the
+model has learned and must be examined empirically.
+
+The \gls{gan} framework learns through competition between a generator and a
+discriminator \cite{Goodfellow2014GAN}. Its conditional formulation,
+\glspl{cgan}, can incorporate additional information into the generation
+process \cite{Mirza2014CGAN}. CTGAN and CTAB-GAN+ extend this idea to tabular
+data containing categorical and continuous variables
+\cite{Xu2019CTGAN,Zhao2024CTABGANPlus}. DP-CGANS was proposed for conditional
+generation with differential privacy in health-data settings
+\cite{Sun2023DPCGANS}.
+
+\section{Research Problem and Objective}
+
+A convincing synthetic dataset must represent more than the most common part
+of a distribution. A generator may reproduce average values and frequent
+categories while failing to capture extreme measurements, uncommon feature
+combinations, or a minority outcome. Aggregate fidelity scores can obscure
+these local failures. This is particularly problematic when synthetic data
+are intended for rare-outcome prediction, because a classifier trained on
+such data can only learn patterns that the generator has retained.
+
+Finding a discrepancy is also different from explaining it. Distributional
+metrics quantify disagreement but do not necessarily identify the variables
+that make synthetic records recognisable or the regions that are missing.
+Methods for explaining \gls{ai} models can provide feature-level evidence.
+SHapley Additive exPlanations (SHAP), for example, attribute a model output to
+its input features \cite{Lundberg2017SHAP}. Explanations have previously been
+used to analyse or guide generative models
+\cite{Nagisetty2020XAIGAN,Rozendo2024XGAN}, and sample reweighting has been
+explored as a way to improve generated distributions
+\cite{Diefenbacher2020DCTRGAN}. For tabular health data, however, there remains
+a practical gap between identifying an important feature and deciding which
+real training records should be emphasised.
+
+The objective of this thesis is to examine whether that gap can be bridged by
+combining feature explanations with measured underrepresentation. The
+empirical study uses MIMIC-IV \cite{PhysioNet-mimiciv-3.1} and WiDS, two
+tabular intensive-care datasets, and compares CTAB-GAN+, CTGAN, and DP-CGANS.
+Hospital mortality provides the main rare-outcome prediction task.
+
+DP-CGANS is run with private training disabled in this study. It consequently
+serves as an architectural comparison model rather than as evidence of a
+formal differential-privacy guarantee. The privacy-related evaluation is
+limited to indicators of memorisation, such as exact matches and
+nearest-neighbour distances.
+
+\section{Research Questions}
+
+The study is organised around the following questions:
+
+\begin{enumerate}
+    \item \textbf{RQ1:} How well do CTAB-GAN+, CTGAN, and DP-CGANS represent
+    global distributions, tails, rare cases, and downstream predictive
+    utility in tabular intensive-care data?
+
+    \item \textbf{RQ2:} What do post-hoc TreeSHAP explanations of a
+    real-versus-synthetic detector and GradientSHAP explanations of the
+    internal CTAB-GAN+ discriminator reveal about detectable synthetic-data
+    artifacts, and to what extent do their feature rankings agree?
+
+    \item \textbf{RQ3:} Can explanation-guided reweighting improve the
+    fidelity, rare-case representation, or downstream utility of synthetic
+    data compared with an unmodified generator and a uniform-augmentation
+    control, and what trade-offs arise?
+\end{enumerate}
+
+\section{Study Overview}
+
+The first part of the study establishes a common baseline for the three
+generator architectures. Each model is trained and assessed under the same
+data-partitioning and reporting procedure. The comparison considers overall
+statistical fidelity, representation of tails and rare cases, transfer to a
+real mortality-prediction task, real--synthetic distinguishability, and
+memorisation-risk indicators.
+
+The second part tests a targeted retraining intervention. A classifier is
+trained after baseline generation to distinguish held-out real records from
+synthetic records. TreeSHAP is used to determine which features contribute to
+correctly identifying synthetic examples. These feature priorities are
+combined with distribution and tail deficits that indicate where synthetic
+probability mass is lower than real probability mass. Real training rows in
+those regions are sampled more frequently when constructing an augmentation
+set. An unmodified baseline and an equally sized uniform augmentation provide
+controls for judging whether any change is attributable to the guidance
+signals rather than simply to adding rows.
+
+The third part examines the CTAB-GAN+ discriminator itself. GradientSHAP is
+applied to discriminator snapshots collected during training, allowing its
+feature attributions to be followed over time and compared with those of the
+post-hoc detector. This is an independent explanation experiment: its
+attributions are not used to calculate sampling weights or retrain any
+generator.
+
+Together, these experiments provide a rare-case-focused comparison of tabular
+generators and a controlled test of explanation-guided data reweighting. The
+central methodological contribution is the separation of two roles:
+feature-level explanations indicate where an audit should focus, while
+region-level deficits determine which real records receive additional
+sampling probability.
+
+\section{Thesis Outline}
+
+The next chapter introduces the relevant work on tabular data generation,
+synthetic health-data evaluation, and model explanation.
+Chapter~\ref{chap:methodology} then presents the experimental design, the
+reweighting method, and the separate internal-discriminator analysis. The
+evaluation chapter defines the measures used for statistical representation,
+rare cases, predictive utility, detectability, and memorisation risk. The
+results and discussion chapters report and interpret the findings. The final
+chapter answers the research questions and summarises the limitations and
+opportunities for further work.

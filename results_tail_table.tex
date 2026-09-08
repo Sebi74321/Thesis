@@ -1,0 +1,45 @@
+\begin{table}[htbp]
+    \centering
+    \caption{Tail and rare-case representation on the real evaluation set.
+    Values are reported as mean $\pm$ standard deviation across three
+    independently trained generator seeds.}
+    \label{tab:rq1_tail_comparison}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lcccc}
+        \toprule
+        Generator
+            & \shortstack{Tail-CDF\\divergence $\downarrow$}
+            & \shortstack{Fixed-tail\\mass error $\downarrow$}
+            & \shortstack{Joint rare-region\\mass error $\downarrow$}
+            & \shortstack{Rare-outcome\\frequency error $\downarrow$} \\
+        \midrule
+        CTAB-GAN+
+            & $\mathbf{0.0230 \pm 0.0028}$
+            & $\mathbf{0.0113 \pm 0.0017}$
+            & $\mathbf{0.0515 \pm 0.0059}$
+            & $\mathbf{0.0034 \pm 0.0029}$ \\
+        CTGAN
+            & $0.0444 \pm 0.0082$
+            & $0.0332 \pm 0.0015$
+            & $0.1289 \pm 0.0077$
+            & $0.1508 \pm 0.0251$ \\
+        DP-CGANS
+            & $0.0363 \pm 0.0114$
+            & $0.0222 \pm 0.0030$
+            & $0.1264 \pm 0.0076$
+            & $0.1160 \pm 0.0048$ \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2mm}
+    \begin{minipage}{0.96\linewidth}
+        \footnotesize
+        \textit{Notes:} Bold values indicate the lowest mean for each metric.
+        Tail-CDF divergence evaluates the upper-tail ECDF. Fixed-tail mass
+        error uses thresholds learned from the real reference partition. Joint
+        rare-region error measures the frequency of rows occupying at least
+        two rare regions. Rare-outcome error is the absolute error in the
+        minority-outcome frequency. DP-CGANS was evaluated in non-private mode.
+    \end{minipage}
+\end{table}

@@ -68,17 +68,26 @@ holdout rows. The primary comparison scope is correct synthetic, matching the
 post-hoc detector. Valid conditional vectors are sampled reproducibly and
 marginalized instead of evaluating the critic with an out-of-distribution
 all-zero conditional vector. Snapshot metrics, row-level outcomes, signed and
-absolute feature attributions, and the final-snapshot comparison with the
-post-hoc detector are written as separate CSV/JSON artifacts.
+absolute feature attributions, and the endpoint comparison with the post-hoc
+detector are written as separate CSV/JSON artifacts.
 Historical discriminator snapshots are evaluated against the same fixed output
 from the variant's final generator. The trajectory therefore measures how each
-historical critic responds to a common final-generator probe; it is not an
-epoch-matched generator/discriminator comparison.
+historical critic responds to a common final-generator probe. Each snapshot now
+also retains the generator from the same epoch on CPU, enabling a second,
+epoch-matched trajectory with fixed latent and condition draws. The convergence
+artifacts include orientation-free separability, real and synthetic recall,
+score-distribution KS/Wasserstein separation, bootstrap AUC intervals, a
+late-window mean/variability/slope summary, and late-window SHAP rank stability.
+This prevents chance accuracy caused by one-class collapse from being mistaken
+for convergence. The external post-hoc detector remains the independent check
+for generator/discriminator co-adaptation.
 
 Use `notebooks/discriminator_snapshot_analysis.ipynb` to inspect snapshot
-performance and classification outcomes, follow feature-attribution trajectories,
-and compare internal-discriminator GradientSHAP with the post-hoc detector's
-TreeSHAP ranking.
+fixed-probe and epoch-matched performance, inspect late-window convergence and
+classification outcomes, follow feature-attribution trajectories, and compare
+internal-discriminator GradientSHAP with the post-hoc detector's TreeSHAP
+ranking. Runs created before paired generator snapshots were introduced cannot
+recover an epoch-matched trajectory and must be retrained for that analysis.
 
 CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
 from the fitted training rows. Raw pre-restoration samples are saved as

@@ -1,0 +1,64 @@
+% Requires \usepackage{booktabs} in the document preamble.
+\begin{table}[htbp]
+    \centering
+    \caption{Downstream mortality utility on the real evaluation set. Values
+    are reported as mean $\pm$ standard deviation.}
+    \label{tab:rq1_downstream_utility}
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabular}{llccc}
+        \toprule
+        Generator & Training data & PR-AUC $\uparrow$ & Macro F1 $\uparrow$
+            & Positive recall $\uparrow$ \\
+        \midrule
+        \multicolumn{5}{l}{\textit{Mortality: unbalanced training}} \\
+        -- & Real only
+            & $0.506 \pm 0.001$ & $0.578 \pm 0.006$ & $0.134 \pm 0.007$ \\
+        CTAB-GAN+ & Synthetic only
+            & $\mathbf{0.450 \pm 0.003}$ & $0.565 \pm 0.001$ & $0.120 \pm 0.003$ \\
+        CTAB-GAN+ & 1:1 real + synthetic
+            & $\mathbf{0.493 \pm 0.005}$ & $0.574 \pm 0.010$ & $0.130 \pm 0.016$ \\
+        CTGAN & Synthetic only
+            & $0.395 \pm 0.019$ & $\mathbf{0.665 \pm 0.009}$ & $\mathbf{0.448 \pm 0.052}$ \\
+        CTGAN & 1:1 real + synthetic
+            & $0.469 \pm 0.009$ & $\mathbf{0.607 \pm 0.007}$ & $\mathbf{0.186 \pm 0.009}$ \\
+        DP-CGANS & Synthetic only
+            & $0.343 \pm 0.023$ & $0.598 \pm 0.002$ & $0.218 \pm 0.019$ \\
+        DP-CGANS & 1:1 real + synthetic
+            & $0.480 \pm 0.011$ & $0.583 \pm 0.008$ & $0.145 \pm 0.010$ \\
+        \midrule
+        \multicolumn{5}{l}{\textit{Mortality: 50/50 balanced training}} \\
+        -- & Real only
+            & $0.507 \pm 0.006$ & $0.687 \pm 0.008$ & $0.388 \pm 0.014$ \\
+        CTAB-GAN+ & Synthetic only
+            & $\mathbf{0.454 \pm 0.004}$ & $\mathbf{0.668 \pm 0.012}$ & $0.340 \pm 0.026$ \\
+        CTAB-GAN+ & 1:1 real + synthetic
+            & $\mathbf{0.498 \pm 0.005}$ & $0.682 \pm 0.008$ & $0.371 \pm 0.017$ \\
+        CTGAN & Synthetic only
+            & $0.399 \pm 0.020$ & $0.657 \pm 0.017$ & $\mathbf{0.526 \pm 0.053}$ \\
+        CTGAN & 1:1 real + synthetic
+            & $0.473 \pm 0.008$ & $0.691 \pm 0.005$ & $\mathbf{0.459 \pm 0.012}$ \\
+        DP-CGANS & Synthetic only
+            & $0.342 \pm 0.022$ & $0.626 \pm 0.011$ & $0.380 \pm 0.012$ \\
+        DP-CGANS & 1:1 real + synthetic
+            & $0.485 \pm 0.011$ & $\mathbf{0.691 \pm 0.008}$ & $0.442 \pm 0.016$ \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2mm}
+    \begin{minipage}{0.96\linewidth}
+        \footnotesize
+        \textit{Notes:} Bold values mark the highest unrounded mean separately
+        among synthetic-only and 1:1 mixture methods for each metric and
+        training balance. ``1:1 real + synthetic'' denotes the additive
+        fraction-1.0 setting: all real training rows plus an equally sized
+        synthetic sample. For the unbalanced task, synthetic-only rows retain
+        their generated outcome prevalence, while mixed rows use the real
+        training prevalence. Real-only standard deviations summarize five
+        classifier repeats; synthetic-only standard deviations summarize three
+        independently trained generator seeds; additive standard deviations
+        summarize the supplied runs across three generator seeds and five
+        classifier repeats per seed. DP-CGANS was evaluated in non-private
+        mode.
+    \end{minipage}
+\end{table}
