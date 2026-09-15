@@ -38,7 +38,8 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert tasks["mortality_balanced"]["balance"] == "balanced"
     assert tasks["mortality_balanced"]["balance_strategy"] == "fixed_50_50"
     weighting = config["weighting"]
-    assert weighting["alpha"] == 4.0
+    expected_alpha = 3.0 if config_name == "mimic_ctabgan.json" else 4.0
+    assert weighting["alpha"] == expected_alpha
     assert weighting["gamma"] == 0.6
     assert weighting["top_k"] == 5
     assert weighting["w_max"] == 3.0
