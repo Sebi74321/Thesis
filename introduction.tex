@@ -33,13 +33,23 @@ generation with differential privacy in health-data settings
 
 \section{Research Problem and Objective}
 
-A convincing synthetic dataset must represent more than the most common part
-of a distribution. A generator may reproduce average values and frequent
-categories while failing to capture extreme measurements, uncommon feature
-combinations, or a minority outcome. Aggregate fidelity scores can obscure
-these local failures. This is particularly problematic when synthetic data
-are intended for rare-outcome prediction, because a classifier trained on
-such data can only learn patterns that the generator has retained.
+Overall statistical similarity does not show whether a generator covers the
+full variability of the real data. Alaa et al. therefore distinguish fidelity
+from diversity, which measures the extent to which real observations are
+covered by the generated distribution \cite{Alaa2022FaithfulSyntheticData}.
+This distinction is especially relevant for imbalanced tabular data. A
+generator can omit a minor category while causing only a small change in the
+overall distribution, and the scarcity of minority observations provides
+fewer opportunities to learn these cases during training
+\cite{Xu2019CTGAN}. Long-tailed continuous variables present a related
+difficulty because values far from the main body of the distribution can be
+challenging to encode accurately \cite{Zhao2024CTABGANPlus}. In an evaluation
+of severely imbalanced clinical data, Kim et al. similarly found that
+conventional single-metric assessment could miss minority-class instability
+and that numerical agreement did not establish equivalent clinical behaviour
+\cite{Kim2026IntegratedSyntheticClinicalEvaluation}. Synthetic data should
+therefore be evaluated separately for overall fidelity, rare-case coverage,
+and downstream predictive utility.
 
 Finding a discrepancy is also different from explaining it. Distributional
 metrics quantify disagreement but do not necessarily identify the variables

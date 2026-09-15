@@ -28,6 +28,14 @@ UTILITY_SCORE_LABELS: dict[str, str] = {
     "positive_f1": "Positive F1",
 }
 
+# Keep the complete score set in tabular artifacts, while limiting audience-facing
+# utility figures to the three complementary metrics used for imbalanced targets.
+UTILITY_PLOT_METRICS: tuple[str, ...] = (
+    "pr_auc",
+    "f1_macro",
+    "positive_recall",
+)
+
 FIDELITY_SCORE_SPECS: dict[str, dict[str, Any]] = {
     "mean_wasserstein_scaled": {
         "label": "Scaled Wasserstein",
@@ -304,13 +312,15 @@ def save_utility_heatmap_artifacts(
     figure, axes = plt.subplots(
         len(task_names),
         1,
-        figsize=(16, max(4.5, 1.0 + 1.05 * len(scores))),
+        figsize=(10, max(4.5, 1.0 + 1.05 * len(scores))),
         squeeze=False,
     )
     for axis, task_name in zip(axes[:, 0], task_names):
         task_scores = scores[scores["utility_task"] == task_name]
-        matrix = task_scores.set_index("display_label")[list(UTILITY_SCORE_LABELS)]
-        matrix = matrix.rename(columns=UTILITY_SCORE_LABELS)
+        matrix = task_scores.set_index("display_label")[list(UTILITY_PLOT_METRICS)]
+        matrix = matrix.rename(
+            columns={metric: UTILITY_SCORE_LABELS[metric] for metric in UTILITY_PLOT_METRICS}
+        )
         sns.heatmap(
             matrix,
             annot=True,
@@ -702,11 +712,15 @@ def save_fidelity_privacy_tradeoff_heatmap_artifacts(
     tradeoff_table = output_dir / "utility_fidelity_privacy_tradeoff_scores.csv"
     tradeoff_image = output_dir / "utility_fidelity_privacy_tradeoff_heatmap.png"
     atomic_write_csv(tradeoff_table, tradeoff)
-    tradeoff_order = tradeoff["display_metric"].drop_duplicates().tolist()
-    raw_tradeoff = tradeoff.pivot(
+    tradeoff_plot = tradeoff[
+        (tradeoff["domain"] != "utility")
+        | tradeoff["metric"].isin(UTILITY_PLOT_METRICS)
+    ]
+    tradeoff_order = tradeoff_plot["display_metric"].drop_duplicates().tolist()
+    raw_tradeoff = tradeoff_plot.pivot(
         index="display_metric", columns="variant", values="improvement_delta"
     ).reindex(index=tradeoff_order, columns=variants)
-    normalized_tradeoff = tradeoff.pivot(
+    normalized_tradeoff = tradeoff_plot.pivot(
         index="display_metric", columns="variant", values="normalized_improvement"
     ).reindex(index=tradeoff_order, columns=variants)
     figure, axis = plt.subplots(

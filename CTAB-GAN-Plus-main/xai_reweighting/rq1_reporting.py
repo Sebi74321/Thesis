@@ -11,14 +11,12 @@ import pandas as pd
 
 PLOT_GROUPS = {
     "utility": [
-        "utility_mortality_roc_auc",
         "utility_mortality_pr_auc",
         "utility_mortality_f1_macro",
         "utility_mortality_positive_recall",
-        "utility_mortality_balanced_roc_auc",
         "utility_mortality_balanced_pr_auc",
         "utility_mortality_balanced_f1_macro",
-        "utility_mortality_balanced_balanced_accuracy",
+        "utility_mortality_balanced_positive_recall",
     ],
     "fidelity": ["mean_wasserstein_scaled", "correlation_distance", "detector_auc"],
     "tails": [
