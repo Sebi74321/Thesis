@@ -13,6 +13,9 @@
     "log_frequency": true,
     "verbose": true,
     "epochs": 200,
-    "pac": 10
+    "pac": 10,
+    "dequantize_integer_features": true,
+    "dequantization_half_width": 0.5,
+    "dequantization_modal_values": {"d1_spo2_max": [100.0]}
   }
 }

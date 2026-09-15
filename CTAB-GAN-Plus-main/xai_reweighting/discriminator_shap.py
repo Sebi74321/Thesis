@@ -359,6 +359,9 @@ def _prepare_probe_frame(adapter, frame: pd.DataFrame) -> pd.DataFrame:
 
 def _encode_probe(adapter, frame: pd.DataFrame, seed: int) -> np.ndarray:
     transformer = adapter.synthesizer.transformer
+    prepare_for_discriminator = getattr(adapter, "prepare_discriminator_probe", None)
+    if prepare_for_discriminator is not None:
+        frame = prepare_for_discriminator(frame, seed=int(seed) + 32452843)
     prepared = _prepare_probe_frame(adapter, frame)
     numpy_state = np.random.get_state()
     ordering = getattr(transformer, "ordering", None)

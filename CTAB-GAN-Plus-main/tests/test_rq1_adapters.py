@@ -8,9 +8,11 @@ import torch
 
 from model.pipeline.data_preparation import DataPrep
 from xai_reweighting.generator_adapters import (
+    CTABGANPlusAdapter,
     CTGANAdapter,
     DPCGANAdapter,
     _apply_numeric_constraints,
+    _dequantize_integer_features,
     _decimal_places,
     _infer_numeric_constraints,
     create_generator,
@@ -88,6 +90,69 @@ def test_ctgan_adapter_preserves_input_schema_and_device(fake_backends):
     assert FakeCTGAN.last_kwargs["enable_gpu"] is False
 
 
+def test_ctab_adapter_dequantizes_before_synthesizer_fit(monkeypatch):
+    class FakeSynthesizer:
+        def __init__(self, **kwargs):
+            self.training_history = []
+            self.mixture_diagnostics = []
+
+        def fit(self, **kwargs):
+            self.fitted = kwargs["train_data"].copy(deep=True)
+            return []
+
+    import xai_reweighting.generator_adapters as adapters_module
+
+    monkeypatch.setattr(adapters_module, "CTABGANSynthesizer", FakeSynthesizer)
+    frame = pd.DataFrame(
+        {"spo2_max": [90.0, 95.0, 100.0], "target": [0, 1, 0]}
+    )
+    original = frame.copy(deep=True)
+    adapter = CTABGANPlusAdapter(
+        categorical_columns=["target"],
+        mixed_columns={"spo2_max": [100.0]},
+        general_columns=["spo2_max"],
+        batch_size=2,
+        epochs=1,
+        device="cpu",
+        progress="off",
+        dequantize_integer_features=True,
+    )
+
+    adapter.fit(frame)
+
+    pd.testing.assert_frame_equal(frame, original)
+    assert adapter.data_prep.df.loc[0, "spo2_max"] != 90.0
+    assert adapter.data_prep.df.loc[1, "spo2_max"] != 95.0
+    assert adapter.data_prep.df.loc[2, "spo2_max"] == 100.0
+
+
+def test_ctgan_adapter_dequantizes_continuous_integer_grid_before_fit(fake_backends):
+    frame = pd.DataFrame(
+        {"spo2_max": [90.0, 95.0, 100.0], "target": [0, 1, 0]}
+    )
+    original = frame.copy(deep=True)
+    adapter = CTGANAdapter(
+        categorical_columns=["target"],
+        batch_size=10,
+        pac=10,
+        epochs=1,
+        device="cpu",
+        progress="off",
+        dequantize_integer_features=True,
+        dequantization_modal_values={"spo2_max": [100.0]},
+    )
+
+    adapter.fit(frame)
+
+    pd.testing.assert_frame_equal(frame, original)
+    assert FakeCTGAN.fitted.loc[0, "spo2_max"] != 90.0
+    assert FakeCTGAN.fitted.loc[1, "spo2_max"] != 95.0
+    assert FakeCTGAN.fitted.loc[2, "spo2_max"] == 100.0
+    assert adapter.dequantization_diagnostics["columns"]["spo2_max"][
+        "preserved_modal_rows"
+    ] == 1
+
+
 def test_dp_adapter_forces_non_private_baseline_and_restores_schema(
     fake_backends, tmp_path
 ):
@@ -105,6 +170,30 @@ def test_dp_adapter_forces_non_private_baseline_and_restores_schema(
     assert adapter.differential_privacy_enabled is False
     assert adapter.backend_mode == "non_private_baseline"
     assert len(generated) == 4
+
+
+def test_dp_adapter_dequantizes_before_transformer_fit(fake_backends, tmp_path):
+    frame = pd.DataFrame(
+        {"spo2_max": [90.0, 95.0, 100.0], "target": [0, 1, 0]}
+    )
+    adapter = DPCGANAdapter(
+        categorical_columns=["target"],
+        batch_size=10,
+        pac=10,
+        epochs=1,
+        private=False,
+        device="cpu",
+        progress="off",
+        work_dir=tmp_path / "dequantized_backend",
+        dequantize_integer_features=True,
+        dequantization_modal_values={"spo2_max": [100.0]},
+    )
+
+    adapter.fit(frame)
+
+    assert FakeDPCGAN.fitted.loc[0, "spo2_max"] != 90.0
+    assert FakeDPCGAN.fitted.loc[1, "spo2_max"] != 95.0
+    assert FakeDPCGAN.fitted.loc[2, "spo2_max"] == 100.0
 
 
 def test_dp_adapter_rejects_private_mode(tmp_path):
@@ -161,6 +250,72 @@ def test_measurement_precision_inference_distinguishes_grids_from_continuous_val
     assert _decimal_places(one_decimal) == 1
     assert _decimal_places(integer_float) == 0
     assert _decimal_places(continuous) > 1
+
+
+def test_training_dequantization_is_bounded_deterministic_and_preserves_modal_values():
+    fitted = pd.DataFrame(
+        {
+            "spo2_max": [90.0, 91.0, 95.0, 100.0, np.nan],
+            "continuous": [0.12, 0.34, 0.56, 0.78, 0.91],
+            "category": [0, 1, 0, 1, 0],
+        }
+    )
+    constraints = _infer_numeric_constraints(fitted)
+    kwargs = {
+        "categorical_columns": ["category"],
+        "mixed_columns": {"spo2_max": [100.0]},
+        "seed": 42,
+        "half_width": 0.5,
+    }
+
+    first, diagnostics = _dequantize_integer_features(
+        fitted, constraints, **kwargs
+    )
+    second, _ = _dequantize_integer_features(fitted, constraints, **kwargs)
+
+    pd.testing.assert_frame_equal(first, second)
+    pd.testing.assert_frame_equal(
+        fitted,
+        pd.DataFrame(
+            {
+                "spo2_max": [90.0, 91.0, 95.0, 100.0, np.nan],
+                "continuous": [0.12, 0.34, 0.56, 0.78, 0.91],
+                "category": [0, 1, 0, 1, 0],
+            }
+        ),
+    )
+    assert 90.0 <= first.loc[0, "spo2_max"] <= 90.5
+    assert 90.5 <= first.loc[1, "spo2_max"] <= 91.5
+    assert 94.5 <= first.loc[2, "spo2_max"] <= 95.5
+    assert first.loc[3, "spo2_max"] == 100.0
+    assert first["continuous"].equals(fitted["continuous"])
+    assert first["category"].equals(fitted["category"])
+    feature = diagnostics["columns"]["spo2_max"]
+    assert feature["dequantized_rows"] == 3
+    assert feature["preserved_modal_rows"] == 1
+    assert feature["lower_boundary_rows"] == 1
+
+
+def test_probe_dequantization_preserves_already_fractional_generator_values():
+    frame = pd.DataFrame({"measurement": [90.0, 90.25, 91.0]})
+    constraints = {
+        "measurement": {
+            "integer_valued": True,
+            "minimum": 90.0,
+            "maximum": 91.0,
+        }
+    }
+
+    result, diagnostics = _dequantize_integer_features(
+        frame,
+        constraints,
+        categorical_columns=[],
+        mixed_columns={},
+        seed=7,
+    )
+
+    assert result.loc[1, "measurement"] == 90.25
+    assert diagnostics["columns"]["measurement"]["non_grid_rows_preserved"] == 1
 
 
 def test_numeric_postprocessing_rounds_integer_valued_floats_without_clipping():

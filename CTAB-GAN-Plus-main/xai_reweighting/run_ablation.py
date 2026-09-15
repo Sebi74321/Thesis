@@ -423,6 +423,18 @@ def _save_training_artifacts(
         atomic_write_json(
             output_dir / f"numeric_postprocessing_{variant}.json", numeric_constraints
         )
+    dequantization = getattr(model, "dequantization_diagnostics", None)
+    if dequantization is not None:
+        atomic_write_json(
+            output_dir / f"training_dequantization_{variant}.json",
+            dequantization,
+        )
+        diagnostics["training_dequantization_enabled"] = bool(
+            dequantization.get("enabled", False)
+        )
+        diagnostics["training_dequantized_features"] = sorted(
+            dequantization.get("columns", {})
+        )
     diagnostics["mixture_all_converged"] = (
         all(item.get("converged", False) for item in mixture) if mixture else None
     )
@@ -600,6 +612,14 @@ def _save_discriminator_shap_artifacts(
         "seed": int(shap_config.get("seed", seed)),
         "excluded_features": excluded,
         "probe": "balanced_real_audit_and_variant_synthetic_audit",
+        "probe_integer_representation": (
+            "deterministically_dequantized_like_training"
+            if bool(getattr(model, "dequantize_integer_features", False))
+            else "original_values"
+        ),
+        "training_dequantization_enabled": bool(
+            getattr(model, "dequantize_integer_features", False)
+        ),
         "temporal_interpretation": (
             "historical_discriminator_snapshots_evaluated_against_a_fixed_"
             "final_generator_probe"

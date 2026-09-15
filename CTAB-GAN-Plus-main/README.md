@@ -96,6 +96,15 @@ from the fitted training rows. Raw pre-restoration samples are saved as
 `measurement_precision_<variant>.json`. SpO2 maximum is configured as a mixed
 column with an explicit value at 100 so its common measurement ceiling can be
 modelled rather than approximated by arbitrary values just below 100.
+Continuously modelled integer-grid features are dequantized for all three GAN
+backends with deterministic bounded uniform noise. This prevents their
+discriminators from using fractional-versus-integer values as a shortcut. Lower
+and upper support boundaries receive one-sided noise, configured mixed/modal
+values such as SpO2=100 remain exact, categorical columns are excluded, and
+already fractional values are preserved. Released samples are still rounded to
+the precision learned from the untouched real training rows. Per-variant details
+are saved as `training_dequantization_<variant>.json` for ablations and
+`training_dequantization.json` for RQ1 model runs.
 MIMIC WBC minimum and maximum are modelled in log space to reduce the excessive
 synthetic upper tail; the upstream positive-log inverse-transform assignment
 has been repaired so generated values return to the original clinical scale.

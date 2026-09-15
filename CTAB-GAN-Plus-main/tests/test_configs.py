@@ -22,6 +22,8 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert set(categorical).union(continuous) == set(columns)
     assert config["target_col"] in categorical
     assert config["generator"]["categorical_columns"] == categorical
+    assert config["generator"]["dequantize_integer_features"] is True
+    assert config["generator"]["dequantization_half_width"] == 0.5
     assert set(config["generator"]["general_columns"]) == set(continuous)
     mixed = config["mixed_utility"]
     assert mixed["enabled"] is True
@@ -94,8 +96,28 @@ def test_wids_large_dataset_settings():
 def test_rq1_configs_define_all_models(name):
     config = load_rq1_config(PROJECT_ROOT / "configs" / name)
     assert set(config["models"]) == {"ctabgan_plus", "ctgan", "dp_cgan"}
+    for model in config["models"].values():
+        assert model["dequantize_integer_features"] is True
+        assert model["dequantization_half_width"] == 0.5
     assert config["models"]["dp_cgan"]["private"] is False
     assert config["models"]["dp_cgan"]["saved_transformer"] is None
+
+
+@pytest.mark.parametrize(
+    "name,modal_feature",
+    [
+        ("mimic_ctgan.json", "spo2_max"),
+        ("mimic_dpcgan.json", "spo2_max"),
+        ("wids_ctgan.json", "d1_spo2_max"),
+        ("wids_dpcgan.json", "d1_spo2_max"),
+    ],
+)
+def test_non_ctab_ablation_configs_share_dequantization(name, modal_feature):
+    config = load_ablation_config(PROJECT_ROOT / "configs" / name)
+    generator = config["generator"]
+    assert generator["dequantize_integer_features"] is True
+    assert generator["dequantization_half_width"] == 0.5
+    assert generator["dequantization_modal_values"][modal_feature] == [100.0]
     assert config["models"]["dp_cgan"]["discriminator_steps"] == 10
     assert config["models"]["ctabgan_plus"]["categorical_columns"] == config["categorical_cols"]
 

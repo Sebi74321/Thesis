@@ -16,6 +16,9 @@
     "pac": 10,
     "private": false,
     "saved_transformer": null,
+    "dequantize_integer_features": true,
+    "dequantization_half_width": 0.5,
+    "dequantization_modal_values": {"spo2_max": [100.0]},
     "reuse_transformer_across_variants": true
   }
 }

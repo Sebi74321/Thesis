@@ -136,6 +136,15 @@ def _training_artifacts(
         getattr(model, "convergence_warnings", [])
     )
     diagnostics["convergence_warning_count"] = len(diagnostics["convergence_warnings"])
+    dequantization = getattr(model, "dequantization_diagnostics", None)
+    if dequantization is not None:
+        atomic_write_json(output_dir / "training_dequantization.json", dequantization)
+        diagnostics["training_dequantization_enabled"] = bool(
+            dequantization.get("enabled", False)
+        )
+        diagnostics["training_dequantized_features"] = sorted(
+            dequantization.get("columns", {})
+        )
     diagnostics["training_rows"] = train_rows
     batch_size = int(model_config.get("batch_size", train_rows))
     epochs = int(model_config.get("epochs", 0))

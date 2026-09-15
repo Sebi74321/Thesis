@@ -177,6 +177,8 @@
     "mixture_max_iter": 500,
     "mixture_n_init": 3,
     "mixture_tol": 0.001,
+    "dequantize_integer_features": true,
+    "dequantization_half_width": 0.5,
     "snapshot_frq": 25
   },
   "smoke_rows": 500,
