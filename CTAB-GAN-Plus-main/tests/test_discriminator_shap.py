@@ -79,6 +79,8 @@ def test_discriminator_wrapper_marginalizes_valid_conditions():
 
 def test_probe_encoding_rebuilds_and_restores_mixed_column_masks():
     class MixedMaskTransformer:
+        output_info = [(1, "tanh"), (1, "softmax")]
+
         def __init__(self):
             self.meta = [{"type": "mixed", "modal": [100.0]}]
             self.filter_arr = [np.array([True, False, True])]
@@ -88,7 +90,7 @@ def test_probe_encoding_rebuilds_and_restores_mixed_column_masks():
             assert len(self.filter_arr[0]) == len(values)
             assert self.filter_arr[0].tolist() == [True, False, True, False]
             self.ordering.append(np.array([0]))
-            return np.asarray(values, dtype=np.float32)
+            return np.column_stack([np.asarray(values, dtype=np.float32), np.ones(len(values))])
 
     transformer = MixedMaskTransformer()
     original_filter = transformer.filter_arr
@@ -109,7 +111,7 @@ def test_probe_encoding_rebuilds_and_restores_mixed_column_masks():
         seed=42,
     )
 
-    assert encoded.shape == (4, 1)
+    assert encoded.shape == (4, 2)
     assert transformer.filter_arr is original_filter
     assert transformer.ordering == []
 
@@ -220,7 +222,8 @@ def test_native_ctab_31_features_can_have_32_output_spans():
     assert slices["spo2_max"] == slice(30, 35)
 
 
-def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch):
+@pytest.mark.parametrize("unseen_audit_category", [False, True])
+def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch, unseen_audit_category):
     class FakeGradientExplainer:
         backgrounds = []
 
@@ -232,10 +235,10 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
             np.random.random()
             return rows.detach().cpu().numpy()[:, :, None]
 
-    import shap
+    import sys
     import xai_reweighting.discriminator_shap as discriminator_shap_module
 
-    monkeypatch.setattr(shap, "GradientExplainer", FakeGradientExplainer)
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(GradientExplainer=FakeGradientExplainer))
     monkeypatch.setattr(
         discriminator_shap_module,
         "_critic_scores",
@@ -257,6 +260,7 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
     synthesizer = SimpleNamespace(
         dside=4,
         num_channels=2,
+        random_dim=2,
         transformer=transformer,
         Dtransformer=ImageTransformer(4),
         cond_generator=SimpleNamespace(n_opt=0),
@@ -280,11 +284,17 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
     np.random.seed(99)
     expected_next_random = np.random.random()
     np.random.seed(99)
+    real = pd.DataFrame({"feature": [10.0] * 4, "target": [0.0, 1.0, 0.0, 1.0]})
+    if unseen_audit_category:
+        from sklearn.preprocessing import LabelEncoder
+
+        adapter.data_prep.label_encoder_list = [
+            {"column": "target", "label_encoder": LabelEncoder().fit(["0.0", "1.0"])}
+        ]
+        real = pd.concat([real, pd.DataFrame({"feature": [10.0], "target": [2.0]})], ignore_index=True)
     evaluation = evaluate_discriminator_snapshots(
         adapter,
-        pd.DataFrame(
-            {"feature": [10.0] * 4, "target": [0.0, 1.0, 0.0, 1.0]}
-        ),
+        real,
         pd.DataFrame(
             {"feature": [-10.0] * 4, "target": [0.0, 1.0, 0.0, 1.0]}
         ),
@@ -295,6 +305,9 @@ def test_snapshot_evaluation_reuses_rows_and_returns_tidy_trajectory(monkeypatch
         exclude_features=["target"],
     )
     result = evaluation.trajectory
+    assert evaluation.probe_support["real"]["excluded_rows"] == int(unseen_audit_category)
+    assert evaluation.probe_support["synthetic"]["excluded_rows"] == 0
+    assert evaluation.probe_support["balanced_rows_per_source"] == 4
 
     assert result["epoch"].tolist() == [25, 25, 50, 50]
     assert result["outcome_group"].tolist() == [
@@ -339,3 +352,30 @@ def test_snapshot_evaluation_requires_snapshot_capture():
             pd.DataFrame({"x": range(4)}),
             pd.DataFrame({"x": range(4)}),
         )
+
+
+def test_unencodable_probe_saves_explicit_unavailable_artifacts(tmp_path):
+    import json
+    from sklearn.preprocessing import LabelEncoder
+    from xai_reweighting.run_ablation import _save_discriminator_shap_artifacts
+
+    adapter = SimpleNamespace(
+        synthesizer=SimpleNamespace(transformer=IdentityTabularTransformer()),
+        data_prep=SimpleNamespace(
+            df=pd.DataFrame(columns=["feature", "target"]),
+            label_encoder_list=[{"column": "target", "label_encoder": LabelEncoder().fit(["known"])}],
+        ),
+        discriminator_snapshots=[{"epoch": 1}],
+    )
+    frame = pd.DataFrame({"feature": [1.0] * 4, "target": ["unseen"] * 4})
+    with pytest.warns(RuntimeWarning, match="excluded rows"):
+        metadata = _save_discriminator_shap_artifacts(
+            adapter, frame, frame, tmp_path, "A0",
+            {"discriminator_shap": {"enabled": True}, "generator": {}}, "ctabgan_plus", 42,
+        )
+    assert metadata["status"] == "skipped_insufficient_supported_rows"
+    report = json.loads((tmp_path / "discriminator_probe_support_A0.json").read_text())
+    assert report["real"]["excluded_rows"] == 4
+    assert pd.read_csv(tmp_path / "discriminator_snapshot_metrics_A0.csv").empty
+    assert pd.read_csv(tmp_path / "discriminator_shap_A0.csv").empty
+    assert pd.read_csv(tmp_path / "discriminator_snapshot_predictions_A0.csv").empty

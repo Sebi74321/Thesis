@@ -571,6 +571,8 @@ def _save_discriminator_shap_artifacts(
         exclude_features=excluded,
     )
     trajectory = evaluation.trajectory
+    support_name = f"discriminator_probe_support_{variant}.json"
+    atomic_write_json(output_dir / support_name, evaluation.probe_support)
     csv_name = f"discriminator_shap_{variant}.csv"
     atomic_write_csv(output_dir / csv_name, trajectory)
     metrics_name = f"discriminator_snapshot_metrics_{variant}.csv"
@@ -603,6 +605,9 @@ def _save_discriminator_shap_artifacts(
         "backend": generator_name,
         "method": "shap.GradientExplainer",
         "model": "ctabgan_plus_internal_discriminator",
+        "status": evaluation.probe_support.get("status", "complete"),
+        "probe_support": evaluation.probe_support,
+        "probe_support_artifact": support_name,
         "epochs": sorted(int(epoch) for epoch in evaluation.metrics["epoch"].unique()),
         "background_rows": (
             int(trajectory["background_rows"].iloc[0]) if not trajectory.empty else 0

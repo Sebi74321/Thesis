@@ -9,8 +9,9 @@ module explains the discriminator that was trained with the GAN.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -31,6 +32,7 @@ from model.synthesizer.ctabgan_synthesizer import (
     determine_layers_disc,
     determine_layers_gen,
 )
+from model.synthesizer.probe_support import supported_probe_rows
 from .detector import (
     OUTCOME_GROUPS,
     deterministic_row_subset,
@@ -99,6 +101,7 @@ class DiscriminatorSnapshotEvaluation:
     epoch_matched_predictions: pd.DataFrame
     late_window_summary: pd.DataFrame
     shap_stability: pd.DataFrame
+    probe_support: dict[str, Any] = field(default_factory=dict)
 
 
 class DiscriminatorTabularWrapper(torch.nn.Module):
@@ -785,6 +788,43 @@ def evaluate_discriminator_snapshots(
 
     feature_names = [str(column) for column in data_prep.df.columns]
     slices = encoded_feature_slices(synthesizer.transformer, feature_names)
+    real_probe, real_support = supported_probe_rows(data_prep, real_probe)
+    synthetic_probe, synthetic_support = supported_probe_rows(data_prep, synthetic_probe)
+    rows_per_source = min(len(real_probe), len(synthetic_probe))
+    probe_support = {
+        "status": "complete",
+        "policy": "exclude_rows_with_categories_unseen_in_real_train",
+        "metric_population": "training_vocabulary_supported_audit_rows",
+        "detector_comparison": "same_protocol_but_not_identical_rows_if_any_excluded",
+        "real": real_support,
+        "synthetic": synthetic_support,
+        "balanced_rows_per_source": rows_per_source,
+    }
+    if real_support["excluded_rows"] or synthetic_support["excluded_rows"]:
+        warnings.warn(
+            "Discriminator probe: excluded rows with categories absent from the fitted "
+            f"training vocabulary (real={real_support['excluded_rows']}/{real_support['input_rows']}, "
+            f"synthetic={synthetic_support['excluded_rows']}/{synthetic_support['input_rows']}). "
+            "Snapshot metrics apply to supported categories only; see discriminator_probe_support artifacts.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if rows_per_source < 4:
+        probe_support.update(status="skipped_insufficient_supported_rows", balanced_rows_per_source=0)
+        prediction_columns = ["epoch", "probe_row", "source", "truth_is_real", "predicted_is_real",
+                              "critic_score", "threshold", "outcome_group"]
+        return DiscriminatorSnapshotEvaluation(
+            trajectory=pd.DataFrame(columns=RESULT_COLUMNS),
+            metrics=pd.DataFrame(columns=METRIC_COLUMNS),
+            predictions=pd.DataFrame(columns=prediction_columns),
+            epoch_matched_metrics=pd.DataFrame(columns=METRIC_COLUMNS),
+            epoch_matched_predictions=pd.DataFrame(columns=prediction_columns),
+            late_window_summary=pd.DataFrame(columns=LATE_WINDOW_COLUMNS),
+            shap_stability=summarize_shap_stability(
+                pd.DataFrame(columns=RESULT_COLUMNS), window_snapshots=late_window_snapshots
+            ),
+            probe_support=probe_support,
+        )
     common, probe, truth, calibration_indices, holdout_indices = (
         prepare_detector_probe(
             real_probe,
@@ -1024,4 +1064,5 @@ def evaluate_discriminator_snapshots(
             trajectory,
             window_snapshots=late_window_snapshots,
         ),
+        probe_support=probe_support,
     )

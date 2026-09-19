@@ -71,6 +71,22 @@ all-zero conditional vector. Snapshot metrics, row-level outcomes, signed and
 absolute feature attributions, and the endpoint comparison with the post-hoc
 detector are written as separate CSV/JSON artifacts.
 
+Held-out audit rows can contain categorical levels absent from `real_train`
+(for example, rare WiDS diagnosis codes). The fitted CTAB+ discriminator has
+no coordinate for those levels. Snapshot evaluation excludes unencodable rows
+before balanced real/synthetic sampling and the calibration/holdout split,
+without refitting the transformer or mapping unknown diagnoses to known ones.
+Each variant saves `discriminator_probe_support_<variant>.json` with coverage,
+excluded input row positions, and per-feature unknown-value counts. Counts for
+different features can overlap; the overall exclusion count counts each row
+once. Snapshot metrics are conditional on training-vocabulary support. The
+full-data detector, fidelity, and utility evaluations retain their audit data,
+so detector/snapshot comparisons no longer use identical rows when exclusions
+occur. The snapshot notebook displays this coverage alongside the results.
+If fewer than four supported rows remain in either source, only the snapshot
+diagnostic is marked `skipped_insufficient_supported_rows`, with empty metric
+tables rather than invented scores; the rest of the experiment continues.
+
 Both `configs/mimic_ctabgan.json` and `configs/wids_ctabgan.json` enable this
 evaluation with a gradual `generator.snapshot_schedule`:
 `{"count": 12, "power": 2.0}`. Epochs follow the curve
