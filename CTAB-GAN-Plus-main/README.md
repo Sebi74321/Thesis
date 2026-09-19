@@ -70,6 +70,26 @@ marginalized instead of evaluating the critic with an out-of-distribution
 all-zero conditional vector. Snapshot metrics, row-level outcomes, signed and
 absolute feature attributions, and the endpoint comparison with the post-hoc
 detector are written as separate CSV/JSON artifacts.
+
+Both `configs/mimic_ctabgan.json` and `configs/wids_ctabgan.json` enable this
+evaluation with a gradual `generator.snapshot_schedule`:
+`{"count": 12, "power": 2.0}`. Epochs follow the curve
+`1 + round((epochs - 1) * (i / (count - 1)) ** power)` for `i=0,...,count-1`.
+This concentrates snapshots early and includes the final epoch as part of the
+schedule rather than appending it beside a recent snapshot. WiDS captures epochs
+1, 3, 8, 16, 27, 42, 60, 82, 106, 134, 165, and 200. MIMIC uses the same curve
+scaled to 150 epochs. Increase `count` for more snapshots or `power` for stronger
+early concentration (power must exceed one). On short runs, count is capped at
+the epoch count and duplicate rounded epochs are removed; both endpoints are
+retained. The epoch list is printed before training and saved in each
+`discriminator_shap_<variant>.json`. Snapshot spacing is measured in epochs,
+not wall-clock time, and evaluation happens after each variant's training.
+More snapshots add CPU memory and evaluation cost. The gradual schedule takes
+precedence over `snapshot_frq`; omit it or set it to null to use the legacy
+fixed interval. Set both to null and disable `discriminator_shap.enabled` to
+disable capture and evaluation. Use a fresh output directory after changing
+the schedule: existing runs cannot recover snapshots from unrecorded epochs.
+
 Historical discriminator snapshots are evaluated against the same fixed output
 from the variant's final generator. The trajectory therefore measures how each
 historical critic responds to a common final-generator probe. Each snapshot now

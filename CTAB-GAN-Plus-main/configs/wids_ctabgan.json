@@ -82,6 +82,15 @@
     "shap_scope": "correct_synthetic_holdout_only",
     "test_size": 0.3
   },
+  "discriminator_shap": {
+    "enabled": true,
+    "background_size": 50,
+    "explain_size": 100,
+    "condition_samples": 8,
+    "bootstrap_repeats": 200,
+    "late_window_snapshots": 3,
+    "exclude_target": false
+  },
   "baseline_diagnostics": {
     "enabled": true,
     "top_n": 10,
@@ -198,7 +207,11 @@
     "mixture_tol": 0.001,
     "dequantize_integer_features": true,
     "dequantization_half_width": 0.5,
-    "snapshot_frq": null
+    "snapshot_frq": null,
+    "snapshot_schedule": {
+      "count": 12,
+      "power": 2.0
+    }
   },
   "smoke_rows": 5000,
   "smoke_epochs": 2,

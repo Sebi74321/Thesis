@@ -179,7 +179,11 @@
     "mixture_tol": 0.001,
     "dequantize_integer_features": true,
     "dequantization_half_width": 0.5,
-    "snapshot_frq": 25
+    "snapshot_frq": null,
+    "snapshot_schedule": {
+      "count": 12,
+      "power": 2.0
+    }
   },
   "smoke_rows": 500,
   "smoke_epochs": 1,

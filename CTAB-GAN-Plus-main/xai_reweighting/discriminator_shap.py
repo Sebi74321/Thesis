@@ -780,7 +780,7 @@ def evaluate_discriminator_snapshots(
     if not snapshots:
         raise ValueError(
             "No discriminator snapshots are available; set generator.snapshot_frq "
-            "to a positive epoch interval"
+            "to a positive epoch interval or configure generator.snapshot_schedule"
         )
 
     feature_names = [str(column) for column in data_prep.df.columns]

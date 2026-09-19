@@ -40,8 +40,7 @@ def test_dataset_config_matches_csv_schema(config_name):
     assert tasks["mortality_balanced"]["balance"] == "balanced"
     assert tasks["mortality_balanced"]["balance_strategy"] == "fixed_50_50"
     weighting = config["weighting"]
-    expected_alpha = 3.0 if config_name == "mimic_ctabgan.json" else 4.0
-    assert weighting["alpha"] == expected_alpha
+    assert weighting["alpha"] == 3.0
     assert weighting["gamma"] == 0.6
     assert weighting["top_k"] == 5
     assert weighting["w_max"] == 3.0
@@ -66,7 +65,10 @@ def test_mimic_age_is_general_and_integer():
     assert "age_at_intime" in config["generator"]["integer_columns"]
     assert config["generator"]["mixed_columns"]["spo2_max"] == [100.0]
     assert set(config["generator"]["log_columns"]) == {"wbc_min", "wbc_max"}
-    assert config["generator"]["snapshot_frq"] == 25
+    assert config["generator"]["snapshot_frq"] is None
+    assert config["generator"]["snapshot_schedule"] == {
+        "count": 12, "power": 2.0,
+    }
     assert config["discriminator_shap"] == {
         "enabled": True,
         "background_size": 50,

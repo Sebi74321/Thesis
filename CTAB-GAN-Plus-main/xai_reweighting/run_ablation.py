@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
+from model.synthesizer.snapshot_schedule import snapshot_epochs
 
 from .augmentation import create_uniform_augmentation, create_weighted_augmentation
 from .data_split import create_data_splits
@@ -610,6 +611,11 @@ def _save_discriminator_shap_artifacts(
             shap_config.get("explain_size", 100)
         ),
         "seed": int(shap_config.get("seed", seed)),
+        "snapshot_schedule": config["generator"].get("snapshot_schedule"),
+        "snapshot_frq": config["generator"].get("snapshot_frq"),
+        "captured_snapshot_epochs": [
+            int(snapshot["epoch"]) for snapshot in model.discriminator_snapshots
+        ],
         "excluded_features": excluded,
         "probe": "balanced_real_audit_and_variant_synthetic_audit",
         "probe_integer_representation": (
@@ -818,15 +824,12 @@ def run_experiment(
         detector_shap = config.get("detector", {})
         snapshot_frequency = config["generator"].get("snapshot_frq")
         epochs = int(config["generator"]["epochs"])
-        if (
-            isinstance(snapshot_frequency, bool)
-            or not isinstance(snapshot_frequency, int)
-            or snapshot_frequency <= 0
-            or snapshot_frequency > epochs
+        if not snapshot_epochs(
+            epochs, snapshot_frequency, config["generator"].get("snapshot_schedule")
         ):
             raise ValueError(
-                "Enabled discriminator_shap requires generator.snapshot_frq to be "
-                "a positive integer no greater than generator.epochs"
+                "Enabled discriminator_shap requires generator.snapshot_schedule "
+                "or a positive generator.snapshot_frq"
             )
         if int(snapshot_shap.get("explain_size", 100)) != int(
             detector_shap.get("shap_max_rows", 100)
@@ -856,6 +859,7 @@ def run_experiment(
         if (
             str(config.get("generator_name", "ctabgan_plus")).lower() == "ctabgan_plus"
             and config.get("discriminator_shap", {}).get("enabled", False)
+            and config["generator"].get("snapshot_schedule") is None
         ):
             configured_frequency = config["generator"].get("snapshot_frq")
             config["generator"]["snapshot_frq"] = min(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import contextmanager, redirect_stdout
+import copy
 import os
 from pathlib import Path
 import sys
@@ -287,6 +288,7 @@ class CTABGANPlusAdapter(GeneratorAdapter):
         batch_size=512,
         epochs=150,
         snapshot_frq: Optional[int] = None,
+        snapshot_schedule: Optional[Dict[str, Any]] = None,
         device: torch.device | str = "cpu",
         seed: int = 42,
         deterministic: bool = True,
@@ -323,6 +325,7 @@ class CTABGANPlusAdapter(GeneratorAdapter):
             "batch_size": batch_size,
             "epochs": epochs,
             "snapshot_frq": snapshot_frq,
+            "snapshot_schedule": copy.deepcopy(snapshot_schedule),
             "device": str(device),
             "progress": progress,
             "progress_label": progress_label,

@@ -8,6 +8,7 @@ from torch.nn import functional as F
 from torch.nn import (Dropout, LeakyReLU, Linear, Module, ReLU, Sequential,
 Conv2d, ConvTranspose2d, Sigmoid, init, BCELoss, CrossEntropyLoss,SmoothL1Loss,LayerNorm)
 from model.synthesizer.transformer import ImageTransformer,DataTransformer
+from model.synthesizer.snapshot_schedule import snapshot_epochs
 from model.privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
 from tqdm.auto import tqdm
 import copy
@@ -356,7 +357,8 @@ class CTABGANSynthesizer:
                  progress_label='CTAB-GAN+',
                  mixture_max_iter=500,
                  mixture_n_init=3,
-                 mixture_tol=1e-3):
+                 mixture_tol=1e-3,
+                 snapshot_schedule=None):
                  
 
         self.random_dim = random_dim
@@ -371,6 +373,9 @@ class CTABGANSynthesizer:
             device if device is not None else ("cuda:0" if torch.cuda.is_available() else "cpu")
         )
         self.snapshot_frq = snapshot_frq
+        self.snapshot_schedule = copy.deepcopy(snapshot_schedule)
+        self.snapshot_epochs = snapshot_epochs(epochs, snapshot_frq, snapshot_schedule)
+        self._snapshot_epoch_set = set(self.snapshot_epochs)
         if progress not in {'auto', 'on', 'off'}:
             raise ValueError("progress must be 'auto', 'on', or 'off'")
         self.progress = progress
@@ -383,6 +388,8 @@ class CTABGANSynthesizer:
 
     def fit(self, train_data=pd.DataFrame, categorical=[], mixed={}, general=[], non_categorical=[], type={}):
 
+        if self.snapshot_epochs and self.progress != 'off':
+            print(f"{self.progress_label} snapshot epochs: {self.snapshot_epochs}", flush=True)
         problem_type = None
         target_index=None
         if type:
@@ -630,9 +637,7 @@ class CTABGANSynthesizer:
                     classifier_updates += 1
                                 
             epoch += 1
-            if self.snapshot_frq and (
-                epoch % self.snapshot_frq == 0 or epoch == self.epochs
-            ):
+            if epoch in self._snapshot_epoch_set:
                 snapshot = {
                     "epoch": epoch,
                     "state_dict": {
