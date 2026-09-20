@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .data_split import create_data_splits
+from .rare_categories import prepare_pooled_splits, override_pooling_threshold, pooling_settings
 from .evaluation import _cat, evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import (
@@ -236,6 +237,7 @@ def run_model_comparison(
         {"stage": stage, "device": device_spec, "selected_models": models, "seeds": seeds, "smoke": smoke}
     )
     split_seed = int(config.get("split_seed", 42))
+    pooling_settings(config)
     data_path = (project_root / config["data_path"]).resolve()
     data_hash = file_sha256(data_path)
     code_hash = _code_hash(project_root)
@@ -301,6 +303,7 @@ def run_model_comparison(
         if prior_indices != splits.indices:
             raise ValueError("Persisted split indices do not match the reproducible split")
     atomic_write_json(split_path, splits.indices)
+    splits = prepare_pooled_splits(splits, config, output_dir, resume=resume)
     real_eval = splits.val if stage == "val" else splits.test
     continuous = config.get(
         "continuous_cols", [column for column in data if column not in config["categorical_cols"]]
@@ -531,6 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--models", default=",".join(VALID_MODELS))
     parser.add_argument("--seeds", default="42,43,44")
+    parser.add_argument("--rare-category-min-count", type=int, help="Override training-only rare-category pooling cutoff")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--resume", action="store_true")
@@ -542,6 +546,7 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     project_root = Path(__file__).resolve().parents[1]
     config = _load_config(args.config.resolve())
+    override_pooling_threshold(config, args.rare_category_min_count)
     output = run_model_comparison(
         config,
         project_root,

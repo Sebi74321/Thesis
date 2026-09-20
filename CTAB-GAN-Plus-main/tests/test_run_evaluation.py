@@ -90,10 +90,27 @@ def test_parser_supports_full_reevaluation_options():
     assert not args.skip_mixed_utility
 
 
-def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
+@pytest.mark.parametrize("pool_rare", [False, True])
+def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch, pool_rare):
     run_dir = _completed_run(tmp_path)
+    if pool_rare:
+        from xai_reweighting.rare_categories import fit_pooling, transform_pooling
+        config_path = run_dir / "config.json"
+        config = json.loads(config_path.read_text())
+        config["rare_categories"] = {"enabled": True, "min_count": 6}
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        source = pd.read_csv(config["data_path"])
+        mapping = fit_pooling(source.iloc[:6], config)
+        (run_dir / "rare_category_mapping.json").write_text(json.dumps(mapping), encoding="utf-8")
+        for variant in ("A0", "A5"):
+            path = run_dir / f"synthetic_{variant}.csv"
+            transform_pooling(pd.read_csv(path), mapping).to_csv(path, index=False)
 
     def fake_real_only(*args, **kwargs):
+        if pool_rare:
+            for frame in args[:2]:
+                assert set(frame["category"]) == {"__OTHER_RARE__"}
+                assert set(frame["target"]) <= {0, 1}
         return pd.DataFrame(
             {
                 "protocol": ["real_only"],
@@ -104,9 +121,14 @@ def test_completed_run_is_reevaluated_without_training(tmp_path, monkeypatch):
         )
 
     def fake_evaluate(real_train, real_eval, synthetic, *args, **kwargs):
+        if pool_rare:
+            for frame in (real_train, real_eval, synthetic):
+                assert set(frame["category"]) == {"__OTHER_RARE__"}
+                assert set(frame["target"]) <= {0, 1}
         score = 0.7 if synthetic["value"].iloc[0] == 0 else 0.8
         return (
-            {"utility_mortality_roc_auc": score, "detector_auc": 1.0 - score},
+            {"utility_mortality_roc_auc": score, "detector_auc": 1.0 - score,
+             "privacy_exact_match_rate": 0.0},
             pd.DataFrame(
                 {
                     "feature": ["value"],
@@ -219,7 +241,8 @@ def test_full_mode_orchestrates_mixed_utility_and_diagnostics(tmp_path, monkeypa
     monkeypatch.setattr(
         "xai_reweighting.run_evaluation.evaluate_variant",
         lambda *args, **kwargs: (
-            {"utility_mortality_roc_auc": 0.7, "detector_auc": 0.8},
+            {"utility_mortality_roc_auc": 0.7, "detector_auc": 0.8,
+             "privacy_exact_match_rate": 0.0},
             pd.DataFrame({"feature": ["value"]}),
         ),
     )

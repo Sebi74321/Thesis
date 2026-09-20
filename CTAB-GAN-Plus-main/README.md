@@ -271,6 +271,61 @@ sides = [4, 8, 16, 24, 32]
 ```
 is the side size of image. You can enlarge the list to [4, 8, 16, 24, 32, 64] or [4, 8, 16, 24, 32, 64, 128] for accepting larger dataset.
 
+## Training-only rare-category pooling
+
+New MIMIC and WiDS runs (all three GANs, both ablation and RQ1) pool categorical
+predictor levels with **fewer than 6 occurrences in the original real_train**
+into `__OTHER_RARE__`. A level occurring exactly 6 times is retained. Mortality
+and every configured utility target are exempt; numeric measurements and split
+indices are unchanged. The cutoff is a pragmatic support rule, not a statistical
+guarantee that a category is learnable or evaluable.
+
+The frozen mapping is shared across all variants/models and applied to audit,
+validation, test, weighting, and real utility baselines. Unseen held-out levels
+map to the same pooled label. This does not use held-out frequencies to choose
+categories. If no training level was pooled in a feature, an unseen held-out
+level still cannot acquire learned support: discriminator coverage diagnostics
+continue to report/filter such unsupported rows. No artificial training rows
+are inserted.
+
+Configuration (inherited by CTGAN, DP-CGAN, and RQ1 configurations):
+
+```json
+"rare_categories": {
+  "enabled": true,
+  "min_count": 6,
+  "pooled_label": "__OTHER_RARE__",
+  "sensitivity_thresholds": [3, 6, 10, 20],
+  "exclude_features": []
+}
+```
+
+Every new run saves `rare_category_mapping.json`, `rare_category_counts.csv`,
+and `rare_category_sensitivity.csv`. The notebooks display original code counts,
+pooled levels, and affected row fractions at each cutoff. The aggregate row counts
+each affected training row once even when multiple features are pooled.
+
+Generate the preprocessing-impact report **without GAN training**:
+
+```bash
+python -m xai_reweighting.run_rare_category_sensitivity \
+  --config configs/wids_ctabgan.json \
+  --thresholds 3,6,10,20 --output-dir results/wids_rare_support
+```
+
+These reports do not establish GAN-performance robustness. For that sensitivity
+analysis, train separate validation runs with identical seeds/settings and
+`--rare-category-min-count 3` (then 6, 10, 20). Both `run_ablation` and
+`run_model_comparison` accept the override; notebooks expose
+`RARE_CATEGORY_MIN_COUNT`. Use a new output directory for each cutoff.
+
+Evaluation is now on the **pooled representation**: it cannot establish fidelity
+for each individual code inside `__OTHER_RARE__`. Report the pooling mass alongside
+fidelity; do not compare pooled versus unpooled metrics as if their task were
+unchanged. Source CSVs are never modified. Legacy runs without the setting retain
+their original representation; reevaluation of pooled runs requires the saved
+mapping and never fits a replacement mapping.
+
 ## Bibtex
 
 To cite this paper, you could use this bibtex

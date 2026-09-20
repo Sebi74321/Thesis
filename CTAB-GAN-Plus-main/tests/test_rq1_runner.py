@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from xai_reweighting.run_model_comparison import build_parser, run_model_comparison
 
@@ -28,12 +29,16 @@ def test_rq1_parser_defaults():
     assert args.seeds == "42,43,44"
 
 
-def test_three_models_share_split_and_resume(tmp_path, monkeypatch):
+@pytest.mark.parametrize("pool_rare", [False, True])
+def test_three_models_share_split_and_resume(tmp_path, monkeypatch, pool_rare):
+    FakeGenerator.fits = []
     project = tmp_path / "project"
     (project / "data").mkdir(parents=True)
     data = pd.DataFrame(
         {"x": range(100), "category": ["a", "b"] * 50, "target": [0] * 80 + [1] * 20}
     )
+    if pool_rare:
+        data.loc[:9, "category"] = [f"rare_{i}" for i in range(10)]
     data.to_csv(project / "data" / "input.csv", index=False)
     config = {
         "dataset_name": "test",
@@ -51,6 +56,9 @@ def test_three_models_share_split_and_resume(tmp_path, monkeypatch):
 
     def fake_adapter(name, model_config, device, seed, run_dir):
         return FakeGenerator(name, seed)
+
+    if pool_rare:
+        config["rare_categories"] = {"enabled": True, "min_count": 6}
 
     def fake_evaluate(*args, **kwargs):
         return {"utility_roc_auc": 0.5, "detector_auc": 0.5}, pd.DataFrame({"feature": ["x"]})
@@ -72,6 +80,12 @@ def test_three_models_share_split_and_resume(tmp_path, monkeypatch):
     results = pd.read_csv(output / "rq1_results.csv")
     assert set(results["model"]) == {"ctabgan_plus", "ctgan", "dp_cgan"}
     assert all(len(fit[2]) == 60 for fit in FakeGenerator.fits)
+    if pool_rare:
+        assert (output / "rare_category_mapping.json").is_file()
+        for _, _, frame in FakeGenerator.fits:
+            assert "__OTHER_RARE__" in frame["category"].values
+            assert not frame["category"].str.startswith("rare_").any()
+            pd.testing.assert_frame_equal(frame, FakeGenerator.fits[0][2])
     assert all((output / "models" / name / "seed_42" / ".complete.json").exists() for name in results["model"])
 
     def fail_adapter(*args, **kwargs):
@@ -81,4 +95,3 @@ def test_three_models_share_split_and_resume(tmp_path, monkeypatch):
         config, project, "val", "cpu", ["ctabgan_plus", "ctgan", "dp_cgan"], [42],
         output_override=output, resume=True, adapter_factory=fail_adapter,
     )
-

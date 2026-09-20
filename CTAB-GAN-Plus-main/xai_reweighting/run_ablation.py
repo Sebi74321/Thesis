@@ -21,6 +21,7 @@ from model.synthesizer.snapshot_schedule import snapshot_epochs
 
 from .augmentation import create_uniform_augmentation, create_weighted_augmentation
 from .data_split import create_data_splits
+from .rare_categories import prepare_pooled_splits, override_pooling_threshold, pooling_settings
 from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
 from .evaluation import _cat, evaluate_variant
@@ -883,6 +884,7 @@ def run_experiment(
         mixed_smoke["additive_fractions"] = [0.0, 1.0]
         mixed_smoke["replacement_fractions"] = [0.0, 1.0]
 
+    pooling_settings(config)
     data_path = (project_root / config["data_path"]).resolve()
     data_hash, code_hash = file_sha256(data_path), _code_hash(project_root)
     fingerprint = _fingerprint(config, data_hash, code_hash)
@@ -956,6 +958,7 @@ def run_experiment(
     split_cfg = config.get("split", {})
     splits = create_data_splits(data, config["target_col"], seed=seed, **split_cfg)
     atomic_write_json(output_dir / "split_indices.json", splits.indices)
+    splits = prepare_pooled_splits(splits, config, output_dir, resume=resume)
     real_eval = splits.val if stage == "val" else splits.test
     reuse_dp_transformer = bool(
         adapter_factory is None
@@ -1496,6 +1499,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stage", choices=("val", "test"), default="val")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--rare-category-min-count", type=int, help="Override training-only rare-category pooling cutoff")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--variants", default=",".join(VALID_VARIANTS))
     parser.add_argument("--smoke", action="store_true")
@@ -1513,6 +1517,7 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     project_root = Path(__file__).resolve().parents[1]
     config = _load_config(args.config.resolve())
+    override_pooling_threshold(config, args.rare_category_min_count)
     if args.seed is not None:
         config["seed"] = args.seed
     output = run_experiment(

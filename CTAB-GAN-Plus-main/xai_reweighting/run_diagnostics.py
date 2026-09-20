@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+from .rare_categories import apply_saved_pooling
 
 from .diagnostics import baseline_detector_diagnostics
 from .io_utils import atomic_write_csv, file_sha256
@@ -37,6 +38,7 @@ def run_existing_diagnostics(
 
     indices = json.loads((run_dir / "split_indices.json").read_text(encoding="utf-8"))
     data = pd.read_csv(data_path)
+    data = apply_saved_pooling(data, run_dir, config)
     real_audit = data.iloc[indices["audit"]].copy(deep=True).reset_index(drop=True)
     synthetic_audit = pd.read_csv(run_dir / "baseline_synthetic_audit.csv")
     components = pd.read_csv(run_dir / "baseline_feature_components.csv")

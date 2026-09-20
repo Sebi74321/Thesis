@@ -202,7 +202,7 @@ def build_utility_heatmap_scores(
             }
         )
 
-        mixture_task = pd.DataFrame()
+        mixture_task = pd.DataFrame(columns=["variant"])
         if mixture_results is not None and not mixture_results.empty:
             required = {"variant", "utility_task", "protocol", "synthetic_fraction"}
             missing = sorted(required - set(mixture_results.columns))

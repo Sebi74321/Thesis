@@ -67,6 +67,13 @@
     "val_fraction": 0.1,
     "test_fraction": 0.1
   },
+  "rare_categories": {
+    "enabled": true,
+    "min_count": 6,
+    "pooled_label": "__OTHER_RARE__",
+    "sensitivity_thresholds": [3, 6, 10, 20],
+    "exclude_features": []
+  },
   "weighting": {
     "alpha": 3.0,
     "gamma": 0.6,

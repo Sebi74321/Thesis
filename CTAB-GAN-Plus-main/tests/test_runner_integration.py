@@ -205,11 +205,13 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
             "target": [0] * 80 + [1] * 20,
         }
     )
+    data.loc[:9, "category"] = [f"rare_{i}" for i in range(10)]
     data.to_csv(data_dir / "input.csv", index=False)
 
     def fake_detector(real, synthetic, categorical_cols, **kwargs):
         return SimpleNamespace(
             metrics={"detector_auc": 0.5},
+            shap_signed=pd.Series({"continuous": 1.0, "category": 0.5, "target": 0.25}),
             shap_importance=pd.Series(
                 {"continuous": 1.0, "category": 0.5, "target": 0.25}
             ),
@@ -217,7 +219,8 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
 
     def fake_evaluation(*args, **kwargs):
         details = pd.DataFrame({"feature": ["continuous"], "metric": [1.0]})
-        return {"score": 1.0}, details
+        return {"score": 1.0, "utility_mortality_positive_recall": 0.5,
+                "mean_wasserstein_scaled": 0.1, "privacy_exact_match_rate": 0.0}, details
 
     monkeypatch.setattr("xai_reweighting.run_ablation.train_detector", fake_detector)
     monkeypatch.setattr("xai_reweighting.run_ablation.evaluate_variant", fake_evaluation)
@@ -226,7 +229,8 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
         "target_col": "target",
         "categorical_cols": ["category", "target"],
         "continuous_cols": ["continuous"],
-        "generator": {},
+        "generator": {"categorical_columns": ["category", "target"]},
+        "rare_categories": {"enabled": True, "min_count": 6},
         "seed": 42,
         "frozen": False,
         "weighting": {"alpha": 1.0, "gamma": 0.25, "top_k": 2, "w_max": 2.0},
@@ -249,6 +253,10 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
     )
     summary = pd.read_csv(output / "ablation_summary.csv")
     assert summary["variant"].tolist() == list(VALID_VARIANTS)
+    assert (output / "rare_category_mapping.json").is_file()
+    for variant in VALID_VARIANTS:
+        generated = pd.read_csv(output / f"synthetic_{variant}.csv")
+        assert not generated["category"].str.startswith("rare_").any()
     deltas = pd.read_csv(output / "ablation_deltas.csv")
     assert set(deltas["control"]) == {"A0", "REAL"}
     assert "comparison_vs_A0" in summary

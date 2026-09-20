@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+from .rare_categories import apply_saved_pooling
 
 from .io_utils import atomic_write_csv, atomic_write_json, file_sha256
 from .mixed_utility import (
@@ -41,6 +42,7 @@ def run_existing_mixed_utility(
         raise ValueError("Source data hash does not match the selected run")
 
     data = pd.read_csv(data_path)
+    data = apply_saved_pooling(data, run_dir, config)
     take = lambda name: data.iloc[indices[name]].copy(deep=True).reset_index(drop=True)
     real_train = take("train")
     stage = config.get("stage", "val")

@@ -73,8 +73,11 @@ def fake_backends(monkeypatch):
     monkeypatch.setitem(sys.modules, "dp_cgans", dp)
 
 
-def test_ctgan_adapter_preserves_input_schema_and_device(fake_backends):
+@pytest.mark.parametrize("pooled", [False, True])
+def test_ctgan_adapter_preserves_input_schema_and_device(fake_backends, pooled):
     frame = pd.DataFrame({"value": [1.25, 2.5], "category": [1, 2], "target": [0, 1]})
+    if pooled:
+        frame["category"] = ["101.05", "__OTHER_RARE__"]
     original = frame.copy(deep=True)
     adapter = CTGANAdapter(
         categorical_columns=["category", "target"], batch_size=10, pac=10, epochs=1,
@@ -153,10 +156,13 @@ def test_ctgan_adapter_dequantizes_continuous_integer_grid_before_fit(fake_backe
     ] == 1
 
 
+@pytest.mark.parametrize("pooled", [False, True])
 def test_dp_adapter_forces_non_private_baseline_and_restores_schema(
-    fake_backends, tmp_path
+    fake_backends, tmp_path, pooled
 ):
     frame = pd.DataFrame({"value": [1.25, 2.5], "category": [1, 2], "target": [0, 1]})
+    if pooled:
+        frame["category"] = ["101.05", "__OTHER_RARE__"]
     adapter = DPCGANAdapter(
         categorical_columns=["category", "target"], batch_size=10, pac=10, epochs=1,
         private=False, device="cpu", progress="off", work_dir=tmp_path / "backend",

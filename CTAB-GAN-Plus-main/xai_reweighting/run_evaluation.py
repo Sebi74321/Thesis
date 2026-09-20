@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
+from .rare_categories import apply_saved_pooling
 
 from .evaluation import evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
@@ -154,6 +155,7 @@ def run_existing_evaluation(
         raise ValueError("Source data hash does not match the selected completed run")
 
     data = pd.read_csv(data_path)
+    data = apply_saved_pooling(data, run_dir, config)
     indices = _read_json(run_dir / "split_indices.json")
     stage = str(config.get("stage", "val"))
     if stage not in {"val", "test"}:
