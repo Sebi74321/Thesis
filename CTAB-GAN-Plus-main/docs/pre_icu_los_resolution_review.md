@@ -16,7 +16,25 @@ retain their previous data hashes: do not bypass their mismatch checks. Use the
 matching original backup for old-run reproduction or start a new corrected-data
 experiment. This is a documented assumption, not reconstruction of true timestamps.
 
-The measurements and recommendations below describe the **pre-correction data**.
+## Minute-grid postprocessing adopted after this review
+
+At the user's request, newly fitted CTAB-GAN+, CTGAN and DP-CGAN adapters now
+round generated pre_icu_los_days to `round(days * 1440) / 1440`. The values remain
+in days, not integer minutes or a fixed number of decimal places. Half-minute
+ties use nearest-even rounding, consistent with existing numeric postprocessing.
+This is a sampling-time correction only: training representation is unchanged.
+
+The shared support guard still leaves a value unchanged if rounding would move
+it farther beyond the fitted bounds. A fitted endpoint within 0.001 seconds of
+the minute grid is recognized as that grid endpoint to allow CSV serialization
+error. No blanket clipping is introduced. Raw samples remain available through
+the adapters' last_raw_sample, and postprocessing diagnostics count changes,
+guarded rows and raw support violations. Existing CSVs are not automatically
+rewritten, and old checkpoints without the new constraint metadata retain their
+original decimal-rounding behavior.
+
+The measurements and recommendations below describe the **pre-correction data
+and implementation**, before the dataset and minute-grid changes above.
 
 Inspected 2026-09-21 using the local WiDS_cleaned.csv and its seed-42
 60/20/10/10 mortality-stratified split. No GAN or postprocessing settings changed.

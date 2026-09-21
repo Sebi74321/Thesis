@@ -22,6 +22,11 @@ from model.synthesizer.ctabgan_synthesizer import CTABGANSynthesizer
 
 from .device import seed_everything
 
+# Explicit unit-aware rule: this duration is stored in days on a minute grid.
+# Decimal-place inference cannot represent rational increments such as 1/1440.
+_MINUTE_DURATION_COLUMNS = {"pre_icu_los_days"}
+_DAY_SERIALIZATION_TOLERANCE = 0.001 / 86400.0
+
 
 class GeneratorAdapter(ABC):
     @abstractmethod
@@ -93,6 +98,18 @@ def _infer_numeric_constraints(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]
             "maximum": float(finite.max()) if len(finite) else None,
             "source_dtype": str(dtype),
         }
+        if column in _MINUTE_DURATION_COLUMNS:
+            constraints[column].update(rounding_scale=1440.0, rounding_grid_unit="minute")
+            # CSV serialization may put a fitted endpoint a fraction of a
+            # millisecond off the minute grid. Recognize that endpoint without
+            # relaxing support guards for genuinely off-grid bounds.
+            for bound in ("minimum", "maximum"):
+                value = constraints[column][bound]
+                if value is not None:
+                    snapped = float(np.rint(value * 1440.0) / 1440.0)
+                    constraints[column][f"grid_{bound}"] = (
+                        snapped if abs(snapped - value) <= _DAY_SERIALIZATION_TOLERANCE else value
+                    )
     return constraints
 
 
@@ -111,14 +128,23 @@ def _apply_numeric_constraints(
         if not np.isfinite(values[non_missing].to_numpy(dtype=float)).all():
             raise RuntimeError(f"Generator produced non-finite values for numeric column '{column}'")
 
-        rounded = values.round(int(constraint["decimals"]))
+        scale = constraint.get("rounding_scale")
+        if scale is None:
+            rounded = values.round(int(constraint["decimals"]))
+        else:
+            scale = float(scale)
+            if not np.isfinite(scale) or scale <= 0:
+                raise ValueError(f"Invalid rounding scale for {column!r}")
+            rounded = (values * scale).round() / scale
         minimum = constraint.get("minimum")
         maximum = constraint.get("maximum")
+        guard_minimum = constraint.get("grid_minimum", minimum) if scale is not None else minimum
+        guard_maximum = constraint.get("grid_maximum", maximum) if scale is not None else maximum
         guarded = pd.Series(False, index=values.index)
-        if minimum is not None:
-            guarded |= (rounded < minimum) & (rounded < values)
-        if maximum is not None:
-            guarded |= (rounded > maximum) & (rounded > values)
+        if guard_minimum is not None:
+            guarded |= (rounded < guard_minimum) & (rounded < values)
+        if guard_maximum is not None:
+            guarded |= (rounded > guard_maximum) & (rounded > values)
         rounded.loc[guarded] = values.loc[guarded]
 
         changed = non_missing & ~np.isclose(

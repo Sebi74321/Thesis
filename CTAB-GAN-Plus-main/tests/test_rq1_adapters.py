@@ -368,3 +368,74 @@ def test_positive_log_columns_round_trip_through_data_prep():
     restored = prep.inverse_prep(prep.df.to_numpy(copy=True))
 
     np.testing.assert_allclose(restored["wbc"], frame["wbc"], rtol=1e-7, atol=1e-9)
+
+
+def test_minute_rounding_is_unit_aware_nonmutating_and_idempotent():
+    fitted = pd.DataFrame({"pre_icu_los_days": [0.0, 0.000694444, 0.002083333],
+                           "temperature": [36.1, 36.5, 37.2]})
+    constraints = _infer_numeric_constraints(fitted)
+    raw = pd.DataFrame({"pre_icu_los_days": np.array([0.1, 1.4, 1.6, 2.9, np.nan]) / 1440,
+                        "temperature": [36.14] * 5})
+    original = raw.copy(deep=True)
+    processed, diagnostics = _apply_numeric_constraints(raw, constraints)
+    np.testing.assert_allclose(processed.pre_icu_los_days * 1440, [0, 1, 2, 3, np.nan], equal_nan=True)
+    assert processed.temperature.tolist() == [36.1] * 5
+    assert constraints["pre_icu_los_days"]["rounding_grid_unit"] == "minute"
+    assert "rounding_scale" not in constraints["temperature"]
+    assert diagnostics["pre_icu_los_days"]["rounded_rows"] == 4
+    pd.testing.assert_frame_equal(raw, original)
+    again, _ = _apply_numeric_constraints(processed, constraints)
+    pd.testing.assert_frame_equal(again, processed)
+
+
+def test_minute_rounding_preserves_support_guard_and_reports_raw_violations():
+    fitted = pd.DataFrame({"pre_icu_los_days": np.array([0.25, 2.75]) / 1440})
+    raw = pd.DataFrame({"pre_icu_los_days": np.array([0.3, 2.7, -1.7, 3.7]) / 1440})
+    processed, diagnostics = _apply_numeric_constraints(raw, _infer_numeric_constraints(fitted))
+    pd.testing.assert_frame_equal(processed, raw)
+    diag = diagnostics["pre_icu_los_days"]
+    assert diag["rounding_guarded_rows"] == 4
+    assert diag["generated_below_min_rows"] == 1
+    assert diag["generated_above_max_rows"] == 1
+
+
+@pytest.mark.parametrize("backend", ["ctabgan_plus", "ctgan", "dp_cgan"])
+def test_all_adapters_round_minutes_and_keep_raw_samples(backend, fake_backends, monkeypatch, tmp_path):
+    feature = "pre_icu_los_days"
+    fitted = pd.DataFrame({feature: np.array([0.0, 1.0, 3.0]) / 1440, "target": [0, 1, 0]})
+    original = fitted.copy(deep=True)
+
+    class FakeSynthesizer:
+        def __init__(self, **kwargs):
+            self.training_history, self.mixture_diagnostics = [], []
+
+        def fit(self, **kwargs):
+            self.frame = kwargs["train_data"].copy()
+            return []
+
+        def sample(self, n):
+            result = self.frame.sample(n=n, replace=True, random_state=1).reset_index(drop=True)
+            result[feature] = 1.6 / 1440
+            return result.to_numpy()
+
+    def sample(self, n):
+        result = self.frame.sample(n=n, replace=True, random_state=1).reset_index(drop=True)
+        result[feature] = 1.6 / 1440
+        return result
+
+    monkeypatch.setattr("xai_reweighting.generator_adapters.CTABGANSynthesizer", FakeSynthesizer)
+    monkeypatch.setattr(FakeCTGAN, "sample", sample)
+    monkeypatch.setattr(FakeDPCGAN, "sample", sample)
+    kwargs = dict(categorical_columns=["target"], epochs=1, batch_size=10, device="cpu", progress="off")
+    if backend == "ctabgan_plus":
+        adapter = CTABGANPlusAdapter(**kwargs)
+    elif backend == "ctgan":
+        adapter = CTGANAdapter(**kwargs)
+    else:
+        adapter = DPCGANAdapter(**kwargs, private=False, work_dir=tmp_path / "backend")
+    adapter.fit(fitted)
+    result = adapter.sample(5)
+    np.testing.assert_allclose(result[feature], 2 / 1440, rtol=0, atol=1e-14)
+    np.testing.assert_allclose(adapter.last_raw_sample[feature], 1.6 / 1440)
+    assert adapter.last_postprocessing_diagnostics[feature]["rounded_rows"] == 5
+    pd.testing.assert_frame_equal(fitted, original)
