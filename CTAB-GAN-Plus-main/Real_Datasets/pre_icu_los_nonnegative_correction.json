@@ -1,0 +1,38 @@
+{
+  "status": "complete",
+  "created_at": "2026-09-21T16:42:42.498Z",
+  "generated_datasets_changed": false,
+  "gan_configuration_changed": false,
+  "files": [
+    {
+      "dataset": "WiDS_cleaned.csv",
+      "column": "pre_icu_los_days",
+      "rule": "negative values replaced with 0 days",
+      "assumption": "Negative pre-ICU duration is an administrative timing error; treat as immediate ICU admission.",
+      "rows": 85389,
+      "columns": 48,
+      "changed_values": 345,
+      "zero_count_before": 3350,
+      "zero_count_after": 3695,
+      "source_sha256_before": "1474828cbf74723ea8a7483f3b33f201dad90a713a236d3c8f934c8a17e5ea5d",
+      "source_sha256_after": "32d455d7e6f36f1ac871a9347e255ad5ac80379bd0b53fdd24258341dc8a5e50",
+      "backup": ".backups/pre_icu_los_nonnegative/WiDS_cleaned.csv.1474828cbf74723ea8a7483f3b33f201dad90a713a236d3c8f934c8a17e5ea5d.original.csv",
+      "all_other_cells_and_row_order_preserved": true
+    },
+    {
+      "dataset": "WiDS.csv",
+      "column": "pre_icu_los_days",
+      "rule": "negative values replaced with 0 days",
+      "assumption": "Negative pre-ICU duration is an administrative timing error; treat as immediate ICU admission.",
+      "rows": 91713,
+      "columns": 186,
+      "changed_values": 778,
+      "zero_count_before": 3711,
+      "zero_count_after": 4489,
+      "source_sha256_before": "27861c711f8c196c2a5c858005075fff61df4fb48f6d350c5120cdf45317adeb",
+      "source_sha256_after": "fbcfa251487a61a439c3a6e3c24138419ea31af904c372157b30487d17c73819",
+      "backup": ".backups/pre_icu_los_nonnegative/WiDS.csv.27861c711f8c196c2a5c858005075fff61df4fb48f6d350c5120cdf45317adeb.original.csv",
+      "all_other_cells_and_row_order_preserved": true
+    }
+  ]
+}

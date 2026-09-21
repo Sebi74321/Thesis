@@ -6,4 +6,5 @@
 logs/
 setup_thesis310*.log
 CTAB-GAN-Plus-main/results/
+CTAB-GAN-Plus-main/Real_Datasets/.backups/
 *-checkpoint*
