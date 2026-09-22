@@ -21,6 +21,7 @@ from model.synthesizer.snapshot_schedule import snapshot_epochs
 
 from .augmentation import create_uniform_augmentation, create_weighted_augmentation
 from .data_split import create_data_splits
+from .shap_reporting import importance_shares
 from .rare_categories import prepare_pooled_splits, override_pooling_threshold, pooling_settings
 from .detector import train_detector
 from .diagnostics import baseline_detector_diagnostics
@@ -711,13 +712,13 @@ def _save_discriminator_detector_comparison(
     )
     comparison = pd.DataFrame({"feature": features})
     comparison["detector_importance_share"] = comparison["feature"].map(
-        detector_importance.astype(float)
+        importance_shares(detector_importance)
     ).fillna(0.0)
     comparison["detector_mean_signed_shap"] = comparison["feature"].map(
         detector_signed.astype(float)
     )
     comparison["snapshot_importance_share"] = comparison["feature"].map(
-        pd.to_numeric(snapshot["importance_share"], errors="coerce")
+        importance_shares(snapshot["importance_share"])
     ).fillna(0.0)
     comparison["snapshot_mean_signed_shap"] = comparison["feature"].map(
         pd.to_numeric(snapshot["mean_signed_shap"], errors="coerce")
@@ -765,6 +766,9 @@ def _save_discriminator_detector_comparison(
             "shared_scope": "correct_synthetic_holdout_only",
             "detector_method": "TreeSHAP",
             "snapshot_method": "GradientExplainer",
+            "importance_normalization": "sum_to_one_or_all_zero",
+            "raw_signed_shap_units": {"detector": "real_class_probability", "snapshot": "raw_critic_score"},
+            "raw_signed_shap_magnitudes_comparable": False,
             "spearman_importance_correlation": (
                 float(spearman) if np.isfinite(spearman) else None
             ),
@@ -1089,7 +1093,7 @@ def run_experiment(
     detector_shap = pd.DataFrame(
         {
             "feature": audit_result.shap_importance.index.astype(str),
-            "importance_share": audit_result.shap_importance.to_numpy(dtype=float),
+            "importance_share": importance_shares(audit_result.shap_importance).to_numpy(dtype=float),
             "mean_signed_shap": audit_result.shap_signed.reindex(
                 audit_result.shap_importance.index
             ).to_numpy(dtype=float),

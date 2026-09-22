@@ -125,6 +125,25 @@ internal-discriminator GradientSHAP with the post-hoc detector's TreeSHAP
 ranking. Runs created before paired generator snapshots were introduced cannot
 recover an epoch-matched trajectory and must be retrained for that analysis.
 
+SHAP comparison reports use **sum-to-one importance shares for both models**
+(all-zero vectors remain zero). This reporting normalization is separate from
+the max-scaled signals used by retraining: weights and augmentation are unchanged.
+Raw signed SHAP values retain their original units (detector real-class probability
+versus internal critic score), so their magnitudes must not be compared directly.
+The snapshot notebook normalizes legacy detector reports in memory before any
+top-feature selection, plots, or heatmaps. Reload its data cells after updating.
+
+To refresh the saved baseline detector and discriminator-comparison CSV/JSON
+reports for an existing run, without training, source-data access or SHAP fitting:
+
+```bash
+python -m xai_reweighting.run_shap_comparison --run-dir results/YOUR_RUN
+```
+
+This leaves feature scores, row weights, raw snapshot attributions, synthetic
+datasets, metrics and the experiment manifest unchanged. Do not rerun GAN training
+just to repair this reporting mismatch.
+
 CTAB-GAN+ sampling restores numeric measurement precision inferred exclusively
 from the fitted training rows. Raw pre-restoration samples are saved as
 `synthetic_raw_<variant>.csv`; authoritative samples retain the usual

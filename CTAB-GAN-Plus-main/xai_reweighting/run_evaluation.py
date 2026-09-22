@@ -19,6 +19,7 @@ from .priority_diagnostics import top_shap_feature_variant_metrics
 from .run_ablation import VALID_VARIANTS, _build_controlled_deltas
 from .run_diagnostics import run_existing_diagnostics
 from .run_mixed_utility import run_existing_mixed_utility
+from .run_shap_comparison import refresh_shap_comparisons
 from .utility_balance import replace_legacy_gender_task
 from .utility_reporting import save_ablation_heatmap_artifacts
 
@@ -294,6 +295,10 @@ def run_existing_evaluation(
         if run_diagnostics:
             report("Recomputing detector, priority, and feature-exclusion diagnostics")
             run_existing_diagnostics(config_path, run_dir)
+
+        if (run_dir / "baseline_detector_shap.csv").is_file():
+            report("Refreshing sum-normalized SHAP comparison reports from saved attributions")
+            refresh_shap_comparisons(run_dir)
 
         ranking_path = run_dir / "baseline_detector_feature_ranking.csv"
         if ranking_path.exists() and feature_details_by_variant:
