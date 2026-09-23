@@ -100,6 +100,15 @@ def _infer_numeric_constraints(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]
         }
         if column in _MINUTE_DURATION_COLUMNS:
             constraints[column].update(rounding_scale=1440.0, rounding_grid_unit="minute")
+            # Preserve the CSV's decimal representation after rounding in units.
+            # WiDS stores minute fractions at nine decimal places, not as the
+            # full floating-point representation of minute / 1440.
+            serialization_decimals = next(
+                (places for places in range(9, 13)
+                 if len(finite) and np.array_equal(finite.to_numpy(), finite.round(places).to_numpy())),
+                None,
+            )
+            constraints[column]['grid_serialization_decimals'] = serialization_decimals
             # CSV serialization may put a fitted endpoint a fraction of a
             # millisecond off the minute grid. Recognize that endpoint without
             # relaxing support guards for genuinely off-grid bounds.
@@ -107,6 +116,8 @@ def _infer_numeric_constraints(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]
                 value = constraints[column][bound]
                 if value is not None:
                     snapped = float(np.rint(value * 1440.0) / 1440.0)
+                    if serialization_decimals is not None:
+                        snapped = float(np.round(snapped, serialization_decimals))
                     constraints[column][f"grid_{bound}"] = (
                         snapped if abs(snapped - value) <= _DAY_SERIALIZATION_TOLERANCE else value
                     )
@@ -136,6 +147,9 @@ def _apply_numeric_constraints(
             if not np.isfinite(scale) or scale <= 0:
                 raise ValueError(f"Invalid rounding scale for {column!r}")
             rounded = (values * scale).round() / scale
+            serialization_decimals = constraint.get('grid_serialization_decimals')
+            if serialization_decimals is not None:
+                rounded = rounded.round(int(serialization_decimals))
         minimum = constraint.get("minimum")
         maximum = constraint.get("maximum")
         guard_minimum = constraint.get("grid_minimum", minimum) if scale is not None else minimum

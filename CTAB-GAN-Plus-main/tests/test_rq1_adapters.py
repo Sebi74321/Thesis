@@ -378,7 +378,11 @@ def test_minute_rounding_is_unit_aware_nonmutating_and_idempotent():
                         "temperature": [36.14] * 5})
     original = raw.copy(deep=True)
     processed, diagnostics = _apply_numeric_constraints(raw, constraints)
-    np.testing.assert_allclose(processed.pre_icu_los_days * 1440, [0, 1, 2, 3, np.nan], equal_nan=True)
+    np.testing.assert_allclose(processed.pre_icu_los_days * 1440, [0, 1, 2, 3, np.nan], atol=1e-6, equal_nan=True)
+    assert processed.pre_icu_los_days.iloc[1] == 0.000694444
+    assert processed.pre_icu_los_days.iloc[2] == 0.001388889
+    assert processed.pre_icu_los_days.iloc[3] == 0.002083333
+    assert constraints['pre_icu_los_days']['grid_serialization_decimals'] == 9
     assert processed.temperature.tolist() == [36.1] * 5
     assert constraints["pre_icu_los_days"]["rounding_grid_unit"] == "minute"
     assert "rounding_scale" not in constraints["temperature"]
@@ -386,6 +390,16 @@ def test_minute_rounding_is_unit_aware_nonmutating_and_idempotent():
     pd.testing.assert_frame_equal(raw, original)
     again, _ = _apply_numeric_constraints(processed, constraints)
     pd.testing.assert_frame_equal(again, processed)
+
+
+def test_minute_serialization_matches_real_csv_after_roundtrip(tmp_path):
+    feature = 'pre_icu_los_days'
+    real = pd.DataFrame({feature: [0.0, 0.000694444, 0.001388889, 0.002083333, 0.002777778]})
+    synthetic = pd.DataFrame({feature: np.arange(5) / 1440})
+    corrected, _ = _apply_numeric_constraints(synthetic, _infer_numeric_constraints(real))
+    real.to_csv(tmp_path / 'real.csv', index=False)
+    corrected.to_csv(tmp_path / 'synthetic.csv', index=False)
+    pd.testing.assert_frame_equal(pd.read_csv(tmp_path / 'real.csv'), pd.read_csv(tmp_path / 'synthetic.csv'))
 
 
 def test_minute_rounding_preserves_support_guard_and_reports_raw_violations():

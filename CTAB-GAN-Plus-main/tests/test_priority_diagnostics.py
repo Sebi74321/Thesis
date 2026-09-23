@@ -4,10 +4,36 @@ import numpy as np
 import pandas as pd
 
 from xai_reweighting.priority_diagnostics import (
+    _continuous_summary,
     feature_exclusion_sensitivity,
     prioritized_feature_diagnostics,
     top_shap_feature_variant_metrics,
 )
+
+
+def test_minute_spikes_preserve_serialization_differences():
+    real = pd.Series([0.0, 0.0, 0.000694444, 0.001388889], name='pre_icu_los_days')
+    synthetic = pd.Series([0.0, 1 / 1440, 1 / 1440, 2 / 1440], name=real.name)
+    original = synthetic.copy()
+    summary, rows = _continuous_summary(real, synthetic, real)
+    spikes = pd.DataFrame(rows).set_index('value')
+    assert len(spikes) == 5
+    assert spikes.loc[1 / 1440, 'frequency_gap'] == 0.5
+    assert spikes.loc[0.000694444, 'frequency_gap'] == -0.25
+    assert spikes.loc[2 / 1440, 'frequency_gap'] == 0.25
+    assert spikes.loc[0.001388889, 'frequency_gap'] == -0.25
+    assert spikes.loc[0.0, 'frequency_gap'] == -0.25
+    pd.testing.assert_series_equal(synthetic, original)
+    off_grid = pd.Series([1.1 / 1440] * 4, name=real.name)
+    _, rows = _continuous_summary(real, off_grid, real)
+    assert any(row['value'] == 1.1 / 1440 and row['synthetic_frequency'] == 1 for row in rows)
+
+
+def test_other_continuous_spikes_remain_exact():
+    real = pd.Series([0.000694444] * 4, name='other')
+    synthetic = pd.Series([1 / 1440] * 4, name='other')
+    _, rows = _continuous_summary(real, synthetic, real)
+    assert len(rows) == 2
 
 
 def test_top_shap_feature_metrics_track_each_variant_and_delta_vs_a0():
