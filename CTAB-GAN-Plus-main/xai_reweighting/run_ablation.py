@@ -998,7 +998,9 @@ def run_experiment(
         "continuous_cols", [c for c in data.columns if c not in config["categorical_cols"]]
     )
     split_cfg = config.get("split", {})
-    splits = create_data_splits(data, config["target_col"], seed=seed, **split_cfg)
+    splits = create_data_splits(
+        data, config["target_col"], seed=int(config.get("split_seed", seed)), **split_cfg
+    )
     atomic_write_json(output_dir / "split_indices.json", splits.indices)
     splits = prepare_pooled_splits(splits, config, output_dir, resume=resume)
     real_eval = splits.val if stage == "val" else splits.test

@@ -3,6 +3,14 @@ Our new paper [TabuLa: Harnessing Language Models for Tabular Data Synthesis](ht
 [here](https://github.com/zhao-zilong/Tabula). Tabula improves tabular data synthesis by leveraging language model structures without the burden of pre-trained model weights. It offers a faster training process by preprocessing tabular data to shorten token sequence, which sharply reducing training time while consistently delivering higher-quality synthetic data. Its training time is longer than CTAB-GAN+, but the synthetic data fidelity is amazing! **It also works for high-dimentional categorical columns!**
 
 # CTAB-GAN+
+
+## Weighting sensitivity study
+
+See [the weighting sensitivity guide](docs/weighting_sensitivity.md) for the
+validation-only alpha/gamma/weight-cap/top-k study, full evaluation coverage,
+seed and parameter spread reports, plots, and resumable CPU/CUDA commands.
+Preview before launching: `python -m xai_reweighting.run_weighting_sensitivity --config configs/mimic_ctabgan.json --output-dir results/mimic_weighting_sensitivity --device cuda:0 --dry-run`.
+
 This is the official git paper [CTAB-GAN+: Enhancing Tabular Data Synthesis](https://arxiv.org/abs/2204.00401). Current code is **WITHOUT** differential privacy part. The code with differential privacy is in this [github](https://github.com/Team-TUD/CTAB-GAN-Plus-DP). 
 If you have any question, please contact `z.zhao-8@tudelft.nl` for more information.
 
