@@ -274,3 +274,27 @@ def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
     mixture = pd.read_csv(output / "utility_mixture_results.csv")
     assert set(mixture["variant"]) == set(VALID_VARIANTS)
     assert set(mixture["protocol"]) == {"additive", "replacement"}
+
+    # Simulate an unfinished A5 and a preprocessing code upgrade. Recovery
+    # must only fit A5 and preserve completed datasets and metrics byte-for-byte.
+    (output / '.A5.complete').unlink()
+    protected = {p: p.read_bytes() for v in VALID_VARIANTS if v != 'A5'
+                 for p in (output / f'synthetic_{v}.csv', output / f'metrics_{v}.json')}
+    fits = []
+
+    class ResumedGenerator(FakeGenerator):
+        def fit(self, df):
+            fits.append(len(df))
+            super().fit(df)
+
+    monkeypatch.setattr('xai_reweighting.run_ablation._code_hash', lambda _: 'patched-code')
+    run_experiment(config, project, 'val', 'cpu', VALID_VARIANTS,
+                   output_override=output, resume=True, resume_allow_code_change=True,
+                   adapter_factory=ResumedGenerator)
+    assert len(fits) == 1
+    assert all(p.read_bytes() == contents for p, contents in protected.items())
+    manifest = json.loads((output / 'manifest.json').read_text())
+    assert manifest['status'] == 'complete'
+    recovery = json.loads((output / manifest['code_change_recovery_files'][0]).read_text())
+    assert recovery['completed_variants_preserved'] == list(VALID_VARIANTS[:-1])
+    assert recovery['previous_manifest']['code_sha256'] != manifest['code_sha256']

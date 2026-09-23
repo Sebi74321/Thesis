@@ -794,6 +794,31 @@ def _save_discriminator_detector_comparison(
     )
 
 
+def _validate_resume(output_dir, config, data_hash, code_hash, allow_code_change=False):
+    previous = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    if previous.get("fingerprint") == _fingerprint(config, data_hash, code_hash):
+        return previous, None
+    if not allow_code_change:
+        raise ValueError("Resume fingerprint mismatch: config, data, or code changed")
+    saved = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
+    old_code = previous.get("code_sha256")
+    if (saved != config or previous.get("data_sha256") != data_hash or not old_code
+            or previous.get("fingerprint") != _fingerprint(saved, data_hash, old_code)):
+        raise ValueError("Code-change recovery requires identical saved config and data, and a valid original fingerprint")
+    completed = [v for v in VALID_VARIANTS
+                 if (output_dir / f".{v}.complete").exists()
+                 and (output_dir / f"metrics_{v}.json").exists()]
+    event = {
+        "accepted_at": datetime.now(timezone.utc).isoformat(),
+        "previous_manifest": previous,
+        "new_code_sha256": code_hash,
+        "new_fingerprint": _fingerprint(config, data_hash, code_hash),
+        "completed_variants_preserved": completed,
+        "policy": "explicit_code_change_acceptance_same_config_and_data",
+    }
+    return previous, event
+
+
 def run_experiment(
     config: Dict[str, Any],
     project_root: Path,
@@ -805,7 +830,10 @@ def run_experiment(
     smoke: bool = False,
     adapter_factory=None,
     progress: str = "auto",
+    resume_allow_code_change: bool = False,
 ) -> Path:
+    if resume_allow_code_change and (not resume or output_override is None):
+        raise ValueError("--resume-allow-code-change requires --resume and --output-dir")
     variants = [v.upper() for v in variants]
     if progress not in {"auto", "on", "off"}:
         raise ValueError("progress must be auto, on, or off")
@@ -902,12 +930,14 @@ def run_experiment(
     manifest_path = output_dir / "manifest.json"
     if output_dir.exists() and not resume:
         raise FileExistsError(f"Output directory exists; pass --resume to continue: {output_dir}")
+    recovery_event = None
+    previous_manifest = {}
     if resume:
         if not manifest_path.exists():
             raise FileNotFoundError("Cannot resume without manifest.json")
-        previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if previous_manifest.get("fingerprint") != fingerprint:
-            raise ValueError("Resume fingerprint mismatch: config, data, or code changed")
+        previous_manifest, recovery_event = _validate_resume(
+            output_dir, config, data_hash, code_hash, resume_allow_code_change
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if adapter_factory is None:
@@ -927,12 +957,20 @@ def run_experiment(
             "allow_tf32": False,
         }
     started = time.time()
+    recovery_history = list(previous_manifest.get("code_change_recovery_files", []))
+    if recovery_event is not None:
+        recovery_file = f"code_change_recovery_{time.time_ns()}.json"
+        atomic_write_json(output_dir / recovery_file, recovery_event)
+        recovery_history.append(recovery_file)
+        print("WARNING: explicitly accepted changed code for resume; completed variants "
+              "retain their original code provenance. See " + recovery_file, flush=True)
     manifest = {
         "status": "running",
         "started_at": datetime.now(timezone.utc).isoformat(),
         "fingerprint": fingerprint,
         "data_sha256": data_hash,
         "code_sha256": code_hash,
+        "code_change_recovery_files": recovery_history,
         "smoke": smoke,
         "progress": progress,
         "generator_name": generator_name,
@@ -1508,6 +1546,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--variants", default=",".join(VALID_VARIANTS))
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--resume-allow-code-change", action="store_true",
+                        help="Explicitly accept changed code on resume; config and data must match; saves provenance")
     parser.add_argument(
         "--progress",
         choices=("auto", "on", "off"),
@@ -1532,6 +1572,7 @@ def main(argv=None) -> int:
         [x.strip() for x in args.variants.split(",") if x.strip()],
         output_override=args.output_dir,
         resume=args.resume,
+        resume_allow_code_change=args.resume_allow_code_change,
         smoke=args.smoke,
         progress=args.progress,
     )

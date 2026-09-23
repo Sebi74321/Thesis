@@ -407,9 +407,14 @@ class CTABGANSynthesizer:
             mixture_n_init=self.mixture_n_init,
             mixture_tol=self.mixture_tol,
         )
-        self.transformer.fit() 
-        self.mixture_diagnostics = list(self.transformer.mixture_diagnostics)
+        try:
+            self.transformer.fit()
+        finally:
+            self.mixture_diagnostics = list(self.transformer.mixture_diagnostics)
         train_data = self.transformer.transform(train_data.values)
+        if (train_data.ndim != 2 or train_data.shape[1] != self.transformer.output_dim
+                or not np.isfinite(train_data).all()):
+            raise RuntimeError('Transformer produced unusable encoded training data')
         data_sampler = Sampler(train_data, self.transformer.output_info)
         data_dim = self.transformer.output_dim
         self.cond_generator = Cond(train_data, self.transformer.output_info)

@@ -359,3 +359,33 @@ To cite this paper, you could use this bibtex
   publisher={Frontiers Media SA}
 }
 ```
+# Recovering an interrupted CTAB-GAN+ mixture fit
+
+Mixture fits retain their bounded retries. A fit that misses the convergence
+tolerance now emits a warning and can continue only if its parameters, variances,
+weights, and responsibilities are numerically valid. Encoded training data must
+also be finite. `mixture_diagnostics_<variant>.json` retains convergence status,
+attempts, usability, and whether a non-converged fit was accepted. This policy is
+not a guarantee of statistical fit quality or GAN convergence.
+
+After installing this code update, resume an existing interrupted run with:
+
+```bash
+python -u -m xai_reweighting.run_ablation \
+  --config results/YOUR_RUN/config.json \
+  --stage val --device cuda:0 --seed 42 \
+  --variants A0,A1,A2,A3,A4,A5 \
+  --output-dir results/YOUR_RUN --progress on \
+  --resume --resume-allow-code-change
+```
+
+Match the original stage, device, seed, variant list, and smoke setting. The
+saved configuration avoids accidentally using updated repository defaults.
+`--resume-allow-code-change` explicitly accepts code changes, not changes to the
+configuration or source data. It requires an explicit output directory and saves
+the previous manifest, both code fingerprints, and the preserved completed
+variants in a timestamped recovery JSON linked from the new manifest. It does
+not verify that arbitrary code changes are scientifically equivalent; use it
+only after reviewing the update. Standard `--resume` remains strict. Completed
+variants are skipped; an unfinished fit restarts. Do not delete completion
+markers or edit fingerprints to recover a real experiment.

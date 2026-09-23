@@ -25,6 +25,8 @@ class DataTransformer():
 
     def _fit_mixture(self, values, column_index, role):
         values = np.asarray(values).reshape([-1, 1])
+        if not len(values) or not np.isfinite(values.astype(float)).all():
+            raise ValueError(f'Empty or non-finite mixture input for column {column_index} ({role})')
         attempts = [
             (self.mixture_max_iter, self.mixture_n_init),
             (max(1000, self.mixture_max_iter * 2), max(5, self.mixture_n_init)),
@@ -66,10 +68,39 @@ class DataTransformer():
             'attempts': attempt_records,
             'converged': bool(fitted is not None and fitted.converged_),
         })
-        if fitted is None or not fitted.converged_:
+        diagnostic = self.mixture_diagnostics[-1]
+        diagnostic['usable'] = False
+        # A stopping-tolerance failure alone does not invalidate a mixture.
+        # Validate even converged fits, and check responsibilities in chunks.
+        try:
+            for name in ('means_', 'covariances_', 'weights_', 'precisions_cholesky_'):
+                if not np.isfinite(getattr(fitted, name)).all():
+                    raise ValueError(f'non-finite {name}')
+            if not np.isfinite(fitted.lower_bound_):
+                raise ValueError('non-finite lower bound')
+            if np.any(fitted.covariances_ <= 0):
+                raise ValueError('non-positive variances')
+            if np.any(fitted.weights_ < 0) or not np.isclose(fitted.weights_.sum(), 1):
+                raise ValueError('invalid component weights')
+            for start in range(0, len(values), 8192):
+                probs = fitted.predict_proba(values[start:start + 8192])
+                if (probs.shape != (len(values[start:start + 8192]), self.n_clusters)
+                        or not np.isfinite(probs).all() or np.any(probs < 0)
+                        or np.any(probs > 1) or not np.allclose(probs.sum(axis=1), 1)):
+                    raise ValueError('invalid component probabilities')
+            diagnostic['usable'] = True
+        except (ValueError, AttributeError, FloatingPointError) as exc:
+            diagnostic['validation_error'] = str(exc)
             raise RuntimeError(
-                f"BayesianGaussianMixture did not converge for column {column_index} "
-                f"({role}) after {attempts[-1][0]} iterations and {attempts[-1][1]} initializations"
+                f'Unusable BayesianGaussianMixture for column {column_index} ({role}): {exc}'
+            ) from exc
+        diagnostic['accepted_nonconverged'] = not bool(fitted.converged_)
+        if not fitted.converged_:
+            warnings.warn(
+                f'BayesianGaussianMixture did not converge for column {column_index} '
+                f'({role}) after bounded retries; using numerically validated fit. '
+                'This is not a convergence guarantee; inspect mixture diagnostics.',
+                ConvergenceWarning, stacklevel=2,
             )
         return fitted
         
@@ -137,6 +168,8 @@ class DataTransformer():
                           comp.append(True)
                       else:
                           comp.append(False)
+                  if not any(comp):
+                      raise RuntimeError(f'No usable mixture components for column {id_}')
                   self.components.append(comp) 
                   self.output_info += [(1, 'tanh','no_g'), (np.sum(comp), 'softmax')]
                   self.output_dim += 1 + np.sum(comp)
@@ -172,6 +205,8 @@ class DataTransformer():
                     else:
                         comp.append(False)
 
+                if not any(comp):
+                    raise RuntimeError(f'No usable non-modal mixture components for column {id_}')
                 self.components.append(comp)
 
                 self.output_info += [(1, 'tanh',"no_g"), (np.sum(comp) + len(info['modal']), 'softmax')]
