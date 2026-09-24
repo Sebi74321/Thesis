@@ -1,0 +1,215 @@
+% Targeted replacements for thesis PDF version (6).
+% Copy each passage into the indicated location, retaining existing labels.
+% This is a replacement pack, NOT a chapter to include wholesale.
+% The complete version-(6) source project is not available locally.
+% See audit.md for the equation audit, terminology changes, and open checks.
+
+% ----------------------------------------------------------------------
+% SECTION 3.4.1: append after the definition of SHAP importance.
+% ----------------------------------------------------------------------
+The SHAP signal describes the fitted post-hoc detector, not a causal effect
+of a feature on data quality. Real records are labelled 1 and synthetic
+records 0, so a positive attribution moves the explained output towards the
+real class, while a negative attribution moves it towards the synthetic
+class, relative to the explainer's reference. Importance uses the magnitude
+of these attributions. For a categorical feature, signed one-hot
+contributions are first summed within each record and the absolute value is
+taken afterwards. The mean is calculated only over the selected correctly
+identified synthetic holdout records. If this subset is empty, the
+implementation returns a zero importance vector rather than an undefined mean.
+
+% ----------------------------------------------------------------------
+% SECTION 3.4.2: append after Eq. (3.4).
+% ----------------------------------------------------------------------
+If the audit-data interquartile range is zero or non-finite, the scale is
+replaced by the population standard deviation of the same real audit values.
+If that value is also zero or non-finite, the scale is set to one. The
+categorical mismatch is the square-root Jensen--Shannon distance with
+base-2 logarithms, not the Jensen--Shannon divergence.
+
+% ----------------------------------------------------------------------
+% SECTION 3.5: replace Eq. (3.8), keeping its original equation label.
+% ----------------------------------------------------------------------
+\begin{equation}
+    \rho_j^{(a)}=
+    \begin{cases}
+        C_j^{(a)}/\sum_{k\in\mathcal{J}_a}C_k^{(a)},
+        & j\in\mathcal{J}_a\text{ and }\sum_{k\in\mathcal{J}_a}C_k^{(a)}>0,\\
+        0, & \text{otherwise}.
+    \end{cases}
+\end{equation}
+
+% SECTION 3.5: replace the closing explanatory paragraph with this passage.
+The contribution of SHAP has three stages. First, the importance signal
+contributes to the combined feature scores and can therefore change which
+features enter the top-$k$ set $\mathcal{J}_a$. Second, it affects their
+relative priorities $\rho_j^{(a)}$. Third, those priorities determine how
+strongly the distributional deficits of the selected features contribute to
+each training row's score and hence its sampling probability. SHAP values
+are not themselves row weights, are not added to the GAN loss, and do not
+provide gradients to the generator. All weighted variants use signals
+derived once from the common A0 audit, without iterative re-explanation.
+
+In A3, $C_j^{(\mathrm{A3})}=\widehat I_j$: SHAP is the only signal used for
+\emph{feature prioritisation}. This does not mean that the complete A3
+weighting procedure is independent of distributional measurements. A3 still
+uses the same one-sided region deficits $g_{jr}$ as A2, A4, and A5 to
+identify underrepresented values of the selected features. A3 therefore
+tests SHAP-only priorities within a shared deficit-based sampling framework.
+It excludes the global mismatch and tail signals from feature scoring,
+but it does not remove the region-deficit mechanism.
+
+% ----------------------------------------------------------------------
+% SECTION 3.7: optional clarification immediately after sampling equation.
+% ----------------------------------------------------------------------
+A high SHAP importance does not automatically increase the weight of every
+row containing that feature: only rows occupying underrepresented regions
+receive a positive contribution from it. If all contributing deficits are
+zero, every row has weight one and the augmentation distribution is uniform.
+Writing $N=|D_{\mathrm{train}}|$ and $m=\lfloor\gamma N\rfloor$, the expected
+share of original record $i$ in the augmented training table is
+$(1+m\pi_i^{(a)})/(N+m)$. The original copy is retained and the expected
+number of additional copies is $m\pi_i^{(a)}$. Thus $w_{\max}$ bounds the
+sampling weight, not the realised number of duplicates.
+
+% ----------------------------------------------------------------------
+% SECTION 4.2.1: replace the patient-level stay-selection description.
+% ----------------------------------------------------------------------
+The query first restricted ICU stays to those whose initial care unit was
+the Medical Intensive Care Unit (MICU) or the Medical/Surgical Intensive
+Care Unit (MICU/SICU). Within this restricted set, stays were ordered by
+\texttt{intime} for each \texttt{subject\_id}, and the earliest stay was
+selected. The age restriction of 18--89 years was then applied to that
+selected stay. The resulting record therefore represents the patient's
+first stay in one of the selected care units, not necessarily the patient's
+first ICU stay overall. An earlier stay in another ICU does not prevent
+inclusion. Conversely, the query does not search for a later age-eligible
+stay if the earliest selected-unit stay fails the age restriction. This
+selection retains at most one ICU stay per patient in the extracted cohort.
+
+% SECTION 4.2.1: replace the following exclusion sentence.
+The SQL step excluded stays outside the selected initial care units,
+retained only the earliest stay within those units per patient, and then
+excluded patients whose selected stay did not meet the age restriction.
+Subsequent preprocessing excluded records with missing values in the
+selected analysis variables.
+
+% TABLE 4.1, first operation cell: use the following wording.
+% Restrict initial care units; retain the earliest selected-unit stay per
+% patient; apply the age restriction; join first-day measurements.
+%
+% FIGURE 4.1 cohort-extraction box:
+% Selected initial care units; earliest stay within these units per patient;
+% age restriction; first-day measurements.
+%
+% APPENDIX A, add before Listing A.1; do not change the executed SQL.
+The care-unit restriction precedes the within-patient ranking in Listing A.1.
+The age restriction is applied after ranking. Accordingly, the query selects
+the earliest stay in the specified initial care units and retains it only
+if its age criterion is met; it does not select the first ICU stay overall.
+
+% ----------------------------------------------------------------------
+% SECTION 5.3: replace the blanket claim that all transformations fit real train.
+% ----------------------------------------------------------------------
+Preprocessing was fitted separately for each component without using its
+evaluation holdout. Generator transformations used only the applicable
+generator-training data, subject to the transformer-reuse policy described
+in Section 5.7. The post-hoc detector fitted its preprocessing on its
+real/synthetic detector-training fold. Each utility classifier fitted its
+preprocessing on its own training sample: synthetic-only, real-only, or
+mixed, after any class-balancing resampling. Nearest-neighbour preprocessing
+was fitted on the real training reference used for that analysis. These
+component-specific transformations were then applied unchanged to their
+respective evaluation data.
+
+% ----------------------------------------------------------------------
+% TABLE 5.4: replacement caption and final column header.
+% Keep all existing coefficient values and rows.
+% ----------------------------------------------------------------------
+% Caption:
+% Ablation variants in the explanation-guided retraining experiment.
+% The coefficients define feature-priority scores, not direct row weights.
+% All A2--A5 variants combine their selected feature priorities with the same
+% distributional region deficits before constructing sampling probabilities.
+%
+% Last column header: Feature-priority rule / augmentation
+% A3 last column: SHAP-only priorities; shared region-deficit row weighting.
+
+% SECTION 5.7: replace the transformer-reuse paragraph.
+For non-private DP-CGANS, the transformer fitted for A0 on the original
+real training partition was frozen, hash-validated, and reused for A1--A5.
+The saved-transformer interface makes this reuse possible without changing
+the generative objective and avoids repeated expensive mixture fitting.
+Each variant still transformed its own augmented rows, rebuilt the sampler
+from those rows, and trained freshly initialised generative networks. Thus
+the fitted representation was fixed, but conditional sampling frequencies
+were not frozen to their A0 values. This is an engineering and experimental
+control choice, not a requirement of differential privacy; DP-CGANS was
+used in non-private mode.
+
+CTAB-GAN+ and CTGAN instead refitted their transformers on each variant's
+training table. Their ablation effects can therefore include changes in
+the fitted representation as well as changes in row exposure. The
+transformer policy is not identical across architectures, and the results
+compare these implemented pipelines rather than isolating reweighting under
+one common fixed-representation policy. A frozen-versus-refitted transformer
+control would be needed to separate these effects across all models.
+
+% SECTION 5.7: augmentation size wording.
+% Replace "0.6N" and "1.6N" as exact counts with
+% m = floor(0.6N) extra rows and N + m total rows, respectively.
+% Equal epoch counts do not imply equal optimiser-update counts when the
+% training set is enlarged. A1 controls this additional exposure for A2--A5.
+
+% ----------------------------------------------------------------------
+% CHAPTER 6: use the corrected local evaluation.tex, or transfer the targeted
+% changes listed in audit.md if retaining the version-(6) chapter source.
+% Its existing labels are preserved; the added AP equation is unnumbered.
+% Key replacement privacy interpretation is repeated here for convenience.
+% SECTION 6.3.4: replace "Lower values indicate fewer direct copies...".
+% ----------------------------------------------------------------------
+A non-zero exact-match rate is not by itself evidence of copying. Matches
+can arise by chance, particularly with discrete variables, rounded
+measurements, or repeated common profiles; there is no general requirement
+that a GAN's exact-match rate be zero. Conversely, zero exact matches only
+means that no complete match was observed in the evaluated synthetic
+sample. It does not exclude near-copies, partial memorisation, or membership
+and attribute inference. The same representation and rounding policy must
+be used for both datasets because these choices affect exact equality.
+
+Nearest-neighbour distances provide complementary descriptive evidence,
+not a privacy guarantee. They depend on scaling, encoding, dimensionality,
+reference-set size, and the density of the underlying population. A
+synthetic-to-held-out distance ratio below one warrants inspection but does
+not prove memorisation; a ratio near one does not establish safety, and
+larger distances may simply indicate poorer fidelity. Aggregate distance
+percentiles can conceal exposure of individual patients or small subgroups.
+These checks should therefore be distinguished from attack-based privacy
+audits under an explicit threat model and from verified differential-privacy
+guarantees~\cite{Stadler2022SyntheticData}.
+
+% ----------------------------------------------------------------------
+% RESULTS, DISCUSSION, CONCLUSION: terminology replacements only.
+% ----------------------------------------------------------------------
+% "Jensen--Shannon divergence" -> "Jensen--Shannon distance"
+% wherever the term refers to the implemented/reported categorical metric.
+% Keep "divergence" when defining the expression inside the square root.
+%
+% "PR-AUC" -> "AP (PR)" in plot/table headings, and
+% "average precision (AP)" at first prose occurrence, then "AP".
+% AP is the implemented non-interpolated precision--recall summary.
+% Do not change saved pr_auc/utility_pr_auc field names or numerical results.
+%
+% "Tail-CDF divergence" -> "upper-tail ECDF gap" for Eq. (6.6) and
+% Tables 7.3--7.5, with legacy output key documented in Chapter 6.
+% Do not relabel fixed-tail mass error or quantile-location error as this gap.
+%
+% DISCUSSION: optional limitation paragraph.
+The ablation labels distinguish the signals used for feature prioritisation,
+not completely independent weighting mechanisms. In particular, A3 combines
+SHAP-only priorities with the shared region-deficit construction. Differences
+between A3 and A2 therefore contrast explanation-based and mismatch-based
+feature priorities within that common mechanism. Interpretation across GAN
+architectures additionally requires acknowledging the asymmetric transformer
+policy: the DP-CGANS representation is fixed across variants, whereas those
+of CTAB-GAN+ and CTGAN are refitted.

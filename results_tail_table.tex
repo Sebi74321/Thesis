@@ -9,7 +9,7 @@
     \begin{tabular}{lcccc}
         \toprule
         Generator
-            & \shortstack{Tail-CDF\\divergence $\downarrow$}
+            & \shortstack{Upper-tail\\ECDF gap $\downarrow$}
             & \shortstack{Fixed-tail\\mass error $\downarrow$}
             & \shortstack{Joint rare-region\\mass error $\downarrow$}
             & \shortstack{Rare-outcome\\frequency error $\downarrow$} \\
@@ -36,7 +36,8 @@
     \begin{minipage}{0.96\linewidth}
         \footnotesize
         \textit{Notes:} Bold values indicate the lowest mean for each metric.
-        Tail-CDF divergence evaluates the upper-tail ECDF. Fixed-tail mass
+        The upper-tail ECDF gap compares the full ECDFs on a 200-point grid
+        from the real 90th percentile to the real maximum. Fixed-tail mass
         error uses thresholds learned from the real reference partition. Joint
         rare-region error measures the frequency of rows occupying at least
         two rare regions. Rare-outcome error is the absolute error in the

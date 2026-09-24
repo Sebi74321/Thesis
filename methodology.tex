@@ -265,8 +265,11 @@ selected scores are converted into feature priorities that sum to one:
 
 \begin{equation}
     \rho_j^{(a)} =
-    \frac{C_j^{(a)}}{\sum_{k\in\mathcal{J}_a}C_k^{(a)}},
-    \qquad j\in\mathcal{J}_a,
+    \begin{cases}
+        C_j^{(a)}/\sum_{k\in\mathcal{J}_a}C_k^{(a)},
+        & j\in\mathcal{J}_a \text{ and }\sum_{k\in\mathcal{J}_a}C_k^{(a)}>0,\\
+        0, & \text{otherwise}.
+    \end{cases}
     \label{eq:feature_priority}
 \end{equation}
 
@@ -275,11 +278,29 @@ the selected-score sum is zero. The code can optionally restrict selection to
 one feature per connected correlation group, defined by
 $|r|\ge 0.65$, but this option is disabled in the thesis configuration files.
 
+SHAP therefore affects three linked components: membership of the top-$k$
+feature set, the relative priorities within that set, and, indirectly, the
+row-sampling probabilities. It does not assign a training record its own SHAP
+value as a weight, modify the GAN loss, or update the generator through
+explanation gradients. The importance vector is derived once from the common
+A0 audit and reused across the weighted variants.
+
+In particular, A3 uses SHAP alone for \emph{feature prioritisation}, not for
+the complete weighting procedure. It omits the global mismatch and tail
+signals from $C_j^{(\mathrm{A3})}$, but still combines the selected SHAP
+priorities with the distributional region deficits $g_{jr}$ defined below.
+All A2--A5 variants use this same region-deficit mechanism. A highly ranked
+feature therefore does not increase a row's weight unless that row occupies
+an underrepresented region. If all contributing region deficits are zero,
+the weights remain one and augmentation is uniform.
+
 The six controlled variants are therefore:
 
 \begin{table}[htbp]
     \centering
-    \caption{Ablation variants implemented in the retraining runner.}
+    \caption{Ablation variants implemented in the retraining runner.
+    A2--A5 differ in feature prioritisation; all four subsequently use the
+    same distributional region-deficit mechanism to construct row weights.}
     \label{tab:ablation_variants}
     \begingroup
     \small
@@ -290,8 +311,8 @@ The six controlled variants are therefore:
         \hline
         A0 & No augmentation & Baseline generator \\
         A1 & Uniform bootstrap augmentation & Controls for added data volume \\
-        A2 & Mismatch-prioritised weighting & Distribution mismatch only \\
-        A3 & TreeSHAP-prioritised weighting & Detector explanation only \\
+        A2 & Mismatch-prioritised weighting & Mismatch-only feature priorities \\
+        A3 & TreeSHAP-prioritised weighting & SHAP-only feature priorities \\
         A4 & $0.625$ SHAP $+0.375$ mismatch & Combined XAI and fidelity signal \\
         A5 & $0.5$ SHAP $+0.3$ mismatch $+0.2$ tail & Adds tail/rare deficit signal \\
         \hline
@@ -406,8 +427,20 @@ raw pre-restoration samples and post-processing diagnostics are saved. For
 DP-CGANS ablations, A0 fits the transformer once from the original real
 training partition. A hash-validated frozen copy is reused by A1--A5, while
 each variant still transforms its own augmented rows, rebuilds its sampler,
-and trains a fresh GAN. This prevents transformer changes from becoming an
-uncontrolled source of variation.
+and trains a fresh GAN. Reuse is an engineering choice enabled by the
+DP-CGANS saved-transformer interface: it avoids repeating the expensive
+mixture fitting and keeps that model's representation fixed across variants.
+It is not a requirement of differential privacy; these experiments use the
+architecture in non-private mode. Rebuilding the sampler allows conditional
+sampling frequencies to reflect each variant's augmented training data.
+
+CTAB-GAN+ and CTGAN instead fit new transformers on each variant's training
+table. Consequently, their ablation effects can include changes in the fitted
+representation as well as changes in training-row exposure. The preprocessing
+policy is therefore not identical across architectures. Comparisons describe
+the implemented pipelines, not an experiment isolating the same fixed
+representation for every GAN. Freezing all transformers, or explicitly
+comparing frozen and refitted transformers, would be a separate control.
 
 \section{Evaluation Protocol}
 \label{sec:evaluation_protocol}

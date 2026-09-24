@@ -8,7 +8,7 @@
     \setlength{\tabcolsep}{5pt}
     \begin{tabular}{llccc}
         \toprule
-        Generator & Training data & PR-AUC $\uparrow$ & Macro F1 $\uparrow$
+        Generator & Training data & AP (PR) $\uparrow$ & Macro F1 $\uparrow$
             & Positive recall $\uparrow$ \\
         \midrule
         \multicolumn{5}{l}{\textit{Mortality: unbalanced training}} \\
@@ -51,8 +51,10 @@
         \textit{Notes:} Bold values mark the highest unrounded mean separately
         among synthetic-only and 1:1 mixture methods for each metric and
         training balance. ``1:1 real + synthetic'' denotes the additive
-        fraction-1.0 setting: all real training rows plus an equally sized
-        synthetic sample. For the unbalanced task, synthetic-only rows retain
+        fraction-1.0 setting: equally sized real-source and synthetic-source
+        samples. Class-balancing resampling may duplicate or omit individual
+        source rows. AP is non-interpolated average precision, not a
+        trapezoidal PR-curve area. For the unbalanced task, synthetic-only rows retain
         their generated outcome prevalence, while mixed rows use the real
         training prevalence. Real-only standard deviations summarize five
         classifier repeats; synthetic-only standard deviations summarize three

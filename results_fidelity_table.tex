@@ -10,7 +10,7 @@
         \toprule
         Generator
             & Wasserstein (scaled) $\downarrow$
-            & Jensen--Shannon $\downarrow$
+            & \shortstack{Jensen--Shannon\\distance $\downarrow$}
             & Correlation $\downarrow$
             & Detector AUC $\rightarrow 0.5$ \\
         \midrule
@@ -37,6 +37,9 @@
         \footnotesize
         \textit{Notes:} Bold values indicate the best mean for each metric.
         Lower values are better for the three distance metrics. Detector AUC
+        uses the same balanced probe protocol for every generator. The
+        categorical metric is the mean square-root Jensen--Shannon distance
+        with base-2 logarithms, not Jensen--Shannon divergence. Detector AUC
         is evaluated by proximity to 0.5, which represents chance-level
         real-versus-synthetic discrimination. DP-CGANS was evaluated in
         non-private mode.
