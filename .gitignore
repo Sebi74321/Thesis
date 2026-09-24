@@ -8,3 +8,13 @@ setup_thesis310*.log
 CTAB-GAN-Plus-main/results/
 CTAB-GAN-Plus-main/Real_Datasets/.backups/
 *-checkpoint*
+
+# Local tools and generated scratch files
+.idea/
+.pytest_cache/
+.pytest_tmp*/
+.ipynb_checkpoints/
+.tmp/
+/tmp/
+.coverage
+htmlcov/

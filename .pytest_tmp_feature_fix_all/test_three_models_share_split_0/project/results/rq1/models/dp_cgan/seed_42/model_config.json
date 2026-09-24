@@ -1,8 +1,0 @@
-{
-  "batch_size": 10,
-  "categorical_columns": [
-    "category",
-    "target"
-  ],
-  "epochs": 1
-}
