@@ -147,21 +147,33 @@ def compute_feature_priority(
     feature_groups: Mapping[str, str] | None = None,
     max_per_group: int | None = None,
     exclude_features: Iterable[str] = (),
+    shuffle_seed: int = 42,
 ) -> pd.DataFrame:
     required = {"feature", "shap", "mismatch", "tail"}
     if not required.issubset(components.columns):
         raise ValueError(f"components must contain {sorted(required)}")
     variant = variant.upper()
+    components = components.copy(deep=True)
+    if variant == "A5_SHUFFLED_SHAP":
+        # Sort before permuting so CSV/input row order cannot change the control.
+        ordered = components.sort_values("feature", kind="stable")
+        permutation = np.random.default_rng(shuffle_seed).permutation(len(ordered))
+        sources = dict(zip(ordered["feature"], ordered["feature"].to_numpy()[permutation]))
+        components["shap_original"] = components["shap"]
+        components["shap_source_feature"] = components["feature"].map(sources)
+        components["shap"] = components["shap_source_feature"].map(ordered.set_index("feature")["shap"])
     if variant == "A2":
         combined = components["mismatch"].astype(float)
     elif variant == "A3":
         combined = components["shap"].astype(float)
     elif variant == "A4":
         combined = 0.625 * components["shap"] + 0.375 * components["mismatch"]
-    elif variant == "A5":
+    elif variant in {"A5", "A5_SHUFFLED_SHAP"}:
         combined = 0.5 * components["shap"] + 0.3 * components["mismatch"] + 0.2 * components["tail"]
+    elif variant == "A5_NO_SHAP":
+        combined = 0.6 * components["mismatch"] + 0.4 * components["tail"]
     else:
-        raise ValueError("Feature priorities are defined only for A2, A3, A4, and A5")
+        raise ValueError(f"No feature-priority definition for {variant}")
 
     result = components.copy()
     result["combined_raw"] = combined
@@ -283,8 +295,13 @@ def compute_row_weights(
 
 def weight_diagnostics(weights: pd.Series, w_max: float) -> Dict[str, float]:
     desc = weights.describe(percentiles=[0.25, 0.5, 0.75]).to_dict()
+    probabilities = weights.to_numpy(dtype=float) / weights.sum()
+    effective_size = float(1.0 / np.sum(probabilities ** 2))
     return {
         **{str(k): float(v) for k, v in desc.items()},
         "fraction_capped": float(np.mean(np.isclose(weights.to_numpy(), w_max))),
         "fraction_above_one": float(np.mean(weights.to_numpy() > 1.0)),
+        "sampling_ess": effective_size,
+        "sampling_ess_fraction": effective_size / len(weights),
+        "maximum_sampling_probability": float(probabilities.max()),
     }

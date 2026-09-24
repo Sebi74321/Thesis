@@ -48,6 +48,9 @@ from .scoring import (
 from .utility_reporting import save_ablation_heatmap_artifacts
 
 VALID_VARIANTS = ("A0", "A1", "A2", "A3", "A4", "A5")
+# Explicit opt-in mechanistic controls, never added to the normal CLI defaults.
+SHAP_CONTROL_VARIANTS = ("A5_NO_SHAP", "A5_SHUFFLED_SHAP")
+SUPPORTED_VARIANTS = VALID_VARIANTS + SHAP_CONTROL_VARIANTS
 VALID_GENERATORS = ("ctabgan_plus", "ctgan", "dp_cgan")
 
 
@@ -805,7 +808,7 @@ def _validate_resume(output_dir, config, data_hash, code_hash, allow_code_change
     if (saved != config or previous.get("data_sha256") != data_hash or not old_code
             or previous.get("fingerprint") != _fingerprint(saved, data_hash, old_code)):
         raise ValueError("Code-change recovery requires identical saved config and data, and a valid original fingerprint")
-    completed = [v for v in VALID_VARIANTS
+    completed = [v for v in SUPPORTED_VARIANTS
                  if (output_dir / f".{v}.complete").exists()
                  and (output_dir / f"metrics_{v}.json").exists()]
     event = {
@@ -817,6 +820,31 @@ def _validate_resume(output_dir, config, data_hash, code_hash, allow_code_change
         "policy": "explicit_code_change_acceptance_same_config_and_data",
     }
     return previous, event
+
+
+def apply_smoke_overrides(config):
+    """Apply the shared smoke protocol in place, including for provenance checks."""
+    config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
+    config["generator"]["batch_size"] = int(config.get("smoke_batch_size", 64))
+    if (
+        str(config.get("generator_name", "ctabgan_plus")).lower() == "ctabgan_plus"
+        and config.get("discriminator_shap", {}).get("enabled", False)
+        and config["generator"].get("snapshot_schedule") is None
+    ):
+        configured_frequency = config["generator"].get("snapshot_frq")
+        config["generator"]["snapshot_frq"] = min(
+            int(configured_frequency or config["generator"]["epochs"]),
+            int(config["generator"]["epochs"]),
+        )
+    config.setdefault("detector", {})["n_estimators"] = 20
+    config["detector"]["shap_max_rows"] = 100
+    for name in ("baseline_diagnostics", "priority_diagnostics", "feature_exclusion_sensitivity", "evaluation"):
+        config.setdefault(name, {})["n_estimators"] = 20
+    mixed_smoke = config.setdefault("mixed_utility", {})
+    mixed_smoke["repeats"] = 1
+    mixed_smoke["n_estimators"] = 20
+    mixed_smoke["additive_fractions"] = [0.0, 1.0]
+    mixed_smoke["replacement_fractions"] = [0.0, 1.0]
 
 
 def run_experiment(
@@ -837,7 +865,7 @@ def run_experiment(
     variants = [v.upper() for v in variants]
     if progress not in {"auto", "on", "off"}:
         raise ValueError("progress must be auto, on, or off")
-    invalid = sorted(set(variants) - set(VALID_VARIANTS))
+    invalid = sorted(set(variants) - set(SUPPORTED_VARIANTS))
     if invalid:
         raise ValueError(f"Unknown variants: {invalid}")
     if stage not in {"val", "test"}:
@@ -892,29 +920,7 @@ def run_experiment(
                 "discriminator_shap.late_window_snapshots must be at least two"
             )
     if smoke:
-        config["generator"]["epochs"] = int(config.get("smoke_epochs", 1))
-        config["generator"]["batch_size"] = int(config.get("smoke_batch_size", 64))
-        if (
-            str(config.get("generator_name", "ctabgan_plus")).lower() == "ctabgan_plus"
-            and config.get("discriminator_shap", {}).get("enabled", False)
-            and config["generator"].get("snapshot_schedule") is None
-        ):
-            configured_frequency = config["generator"].get("snapshot_frq")
-            config["generator"]["snapshot_frq"] = min(
-                int(configured_frequency or config["generator"]["epochs"]),
-                int(config["generator"]["epochs"]),
-            )
-        config.setdefault("detector", {})["n_estimators"] = 20
-        config["detector"]["shap_max_rows"] = 100
-        config.setdefault("baseline_diagnostics", {})["n_estimators"] = 20
-        config.setdefault("priority_diagnostics", {})["n_estimators"] = 20
-        config.setdefault("feature_exclusion_sensitivity", {})["n_estimators"] = 20
-        config.setdefault("evaluation", {})["n_estimators"] = 20
-        mixed_smoke = config.setdefault("mixed_utility", {})
-        mixed_smoke["repeats"] = 1
-        mixed_smoke["n_estimators"] = 20
-        mixed_smoke["additive_fractions"] = [0.0, 1.0]
-        mixed_smoke["replacement_fractions"] = [0.0, 1.0]
+        apply_smoke_overrides(config)
 
     pooling_settings(config)
     data_path = (project_root / config["data_path"]).resolve()
@@ -1212,8 +1218,11 @@ def run_experiment(
                 else None
             ),
             exclude_features=weighting.get("exclude_features", []),
+            shuffle_seed=int(config.get("shap_contribution", {}).get("shuffle_seed", seed)),
         )
-        for variant in ("A2", "A3", "A4", "A5")
+        for variant in ("A2", "A3", "A4", "A5", *[
+            control for control in SHAP_CONTROL_VARIANTS if control in variants
+        ])
     }
     for variant, priority in priorities.items():
         atomic_write_csv(output_dir / f"feature_scores_{variant}.csv", priority)

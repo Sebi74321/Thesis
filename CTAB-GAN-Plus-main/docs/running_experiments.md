@@ -162,4 +162,5 @@ python -m xai_reweighting.run_mixed_utility \
 
 - [Evaluation and diagnostics](evaluation.md)
 - [Weighting sensitivity](weighting_sensitivity.md)
+- [SHAP contribution controls](shap_contribution.md)
 - [Project commands and notebooks](../README.md)

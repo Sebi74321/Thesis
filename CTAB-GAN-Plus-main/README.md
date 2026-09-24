@@ -13,6 +13,7 @@ Run Python commands from this directory after activating the environment with
 | Reevaluate saved synthetic data | `xai_reweighting.run_evaluation` |
 | Inspect feature artifacts | `xai_reweighting.run_diagnostics` |
 | Refresh SHAP comparison reports | `xai_reweighting.run_shap_comparison` |
+| Test SHAP's incremental contribution | `xai_reweighting.run_shap_contribution` |
 
 Each module exposes `--help`. For example:
 
@@ -29,12 +30,14 @@ The current DP-CGAN configurations select the non-private baseline.
 - [Ablation orchestration](notebooks/xai_retraining_orchestrator.ipynb)
 - [RQ1 model comparison](notebooks/rq1_model_comparison.ipynb)
 - [Discriminator and detector SHAP](notebooks/discriminator_snapshot_analysis.ipynb)
+- [SHAP contribution study](notebooks/shap_contribution_study.ipynb)
 
 ## Documentation
 
 - [Setup, training, and resume](docs/running_experiments.md)
 - [Evaluation and diagnostics](docs/evaluation.md)
 - [Weighting sensitivity](docs/weighting_sensitivity.md)
+- [SHAP contribution controls](docs/shap_contribution.md)
 - [Duration-resolution review](docs/pre_icu_los_resolution_review.md)
 - [Upstream attribution and legacy examples](docs/upstream.md)
 

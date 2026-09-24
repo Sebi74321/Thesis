@@ -11,7 +11,7 @@ from .shap_reporting import importance_shares
 
 
 def refresh_shap_comparisons(run_dir):
-    from .run_ablation import _save_discriminator_detector_comparison
+    from .run_ablation import SUPPORTED_VARIANTS, _save_discriminator_detector_comparison
 
     run_dir = Path(run_dir).expanduser().resolve()
     baseline_path = run_dir / "baseline_detector_shap.csv"
@@ -23,7 +23,7 @@ def refresh_shap_comparisons(run_dir):
     config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
     reference = baseline.set_index("feature")
     variants = []
-    for variant in (f"A{i}" for i in range(6)):
+    for variant in SUPPORTED_VARIANTS:
         path = run_dir / f"discriminator_shap_{variant}.csv"
         if not path.is_file():
             continue

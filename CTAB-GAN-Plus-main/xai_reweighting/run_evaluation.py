@@ -16,7 +16,7 @@ from .evaluation import evaluate_variant
 from .io_utils import atomic_write_csv, atomic_write_json, combined_sha256, file_sha256
 from .mixed_utility import evaluate_real_only_baseline
 from .priority_diagnostics import top_shap_feature_variant_metrics
-from .run_ablation import VALID_VARIANTS, _build_controlled_deltas
+from .run_ablation import VALID_VARIANTS, SUPPORTED_VARIANTS, _build_controlled_deltas
 from .run_diagnostics import run_existing_diagnostics
 from .run_mixed_utility import run_existing_mixed_utility
 from .run_shap_comparison import refresh_shap_comparisons
@@ -62,7 +62,7 @@ def _resolve_variants(
     )
     requested_variants = [str(value).upper() for value in (requested or configured)]
     requested_variants = list(dict.fromkeys(requested_variants))
-    invalid = sorted(set(requested_variants) - set(VALID_VARIANTS))
+    invalid = sorted(set(requested_variants) - set(SUPPORTED_VARIANTS))
     if invalid:
         raise ValueError(f"Unknown ablation variants: {invalid}")
     if not requested_variants:
