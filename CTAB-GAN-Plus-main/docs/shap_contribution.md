@@ -128,6 +128,50 @@ A2/A4 or silently pool earlier runs with different configurations/code versions.
 
 ## What the study can support
 
+### Extended notebook evaluation and generator-seed SD
+
+The notebook now includes global fidelity (Wasserstein, KS, JS distance and
+correlation), tail-mass/quantile errors, rare-category/outcome errors, detector
+metrics, nearest-neighbour privacy proxies, both mortality tasks, all configured
+mixture fractions, training prevalence, and feature-level fidelity. Utility
+includes ROC-AUC, average precision, accuracy, balanced accuracy, macro
+precision/recall/F1, and positive-class precision/recall/F1. Separate figures
+keep balanced mortality distinct from natural-prevalence mortality.
+
+Absolute tables and utility heatmaps report mean ± **sample SD across generator
+seeds** (`ddof=1`), after averaging classifier repetitions inside each seed.
+Plots show mean and SD error bars, not confidence intervals. Availability counts
+remain visible; SD for one seed is undefined. Mixture curves and fixed-fraction
+delta panels compare with task-specific real-only utility, while other metric
+panels compare with A0. SHAP-control tables retain the no-SHAP and shuffled-SHAP
+contrasts. Deltas are calculated within each seed before their SD is calculated.
+
+New report files are `study_evaluation_seed_metrics.csv`,
+`study_evaluation_summary.csv`, `study_evaluation_paired_seed_deltas.csv`, and
+`study_evaluation_delta_summary.csv`. The original comprehensive reports and
+predeclared primary endpoint are unchanged. Main synthetic-only utility and
+replacement fraction 1 remain separate because their forest settings and class
+resampling may differ. Legacy main binary balanced accuracy is taken from the
+unambiguous macro-recall field (the same quantity), avoiding the flattened
+`mortality_balanced_accuracy` naming collision without modifying source outputs.
+
+To create these display reports for an **existing** study after updating the code:
+
+```bash
+python -m xai_reweighting.shap_contribution_evaluation \
+  --study-dir results/shap_contribution_mimic_ctabgan
+```
+
+The notebook's “Full evaluation across generator seeds” cell does the same.
+This reporting-only refresh reads the saved `study_run_metrics.csv` inventory;
+it needs no GAN fits, original data, or GPU and does not enforce the current
+training-code hash. It does **not** bypass provenance checks for training/resume,
+rerun evaluations, or discover changed child files. Use the full study's
+`--summarize-only` with its original compatible environment to rebuild the
+validated inventory after evaluating more children. Source CSVs remain unchanged.
+
+### Interpretation
+
 Consistent A5 improvements over **both** no-SHAP and shuffled-SHAP, without material
 utility/tail/privacy-proxy regressions, support the usefulness of the SHAP-guided
 prioritisation policy in the tested setting. Mixed or null results should narrow

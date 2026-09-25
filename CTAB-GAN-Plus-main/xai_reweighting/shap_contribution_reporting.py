@@ -141,6 +141,8 @@ def summarize_contribution(output_dir, plan):
     raw = pd.concat(rows, ignore_index=True)
     measurements = variant_records(raw)
     atomic_write_csv(output_dir / "study_run_metrics.csv", raw)
+    from .shap_contribution_evaluation import write_evaluation_reports
+    write_evaluation_reports(output_dir, raw, plan)
     atomic_write_csv(output_dir / "study_mechanism_diagnostics.csv", pd.DataFrame(mechanisms))
     atomic_write_csv(output_dir / "study_artifact_coverage.csv", pd.concat(coverage, ignore_index=True))
     absolute = spread(measurements, ["variant", "artifact", "context", "metric"])
