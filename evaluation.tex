@@ -444,6 +444,8 @@ forests; WiDS uses three repeats with 100-tree forests to limit runtime. Means
 and standard deviations are reported for the same utility metrics defined
 above.
 
+The utility figures in the Results chapter compare the ablation variants at one preselected endpoint from each protocol rather than displaying the complete mixture curves. In both cases, the selected endpoint is $f=1.0$. For the additive protocol, this corresponds to adding $N$ synthetic-source rows to $N$ real-source rows, so synthetic records constitute 50\% of the final training sample. For the replacement protocol, it corresponds to replacing all $N$ real-source rows, so the classifier is trained on synthetic-source rows only. Consequently, each figure contains one point per ablation variant. The intermediate fractions are part of the evaluation but are not displayed in these endpoint figures, and no conclusions about the shape of the response across mixture proportions are drawn from them.
+
 \subsection{Real-versus-Synthetic Detectability}
 \label{subsec:evaluation_detectability}
 

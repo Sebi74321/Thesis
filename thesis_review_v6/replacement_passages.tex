@@ -213,3 +213,30 @@ feature priorities within that common mechanism. Interpretation across GAN
 architectures additionally requires acknowledging the asymmetric transformer
 policy: the DP-CGANS representation is fixed across variants, whereas those
 of CTAB-GAN+ and CTGAN are refitted.
+
+% ----------------------------------------------------------------------
+% SECTION 7.3.2: replace the introductory utility paragraph and update the
+% captions of Figures 7.3 and 7.4. The figures show only f=1.0, not complete
+% mixture curves.
+% ----------------------------------------------------------------------
+The additive and replacement utility figures summarise one preselected endpoint from each mixture protocol rather than all evaluated mixture proportions. For each ablation variant, the additive panel reports $f=1.0$, for which $N$ synthetic-source rows are added to $N$ real-source rows and synthetic records therefore constitute 50\% of the final training sample. The replacement panel also reports $f=1.0$, for which all $N$ real-source rows are replaced and the classifier is trained on synthetic-source rows only. Each marker consequently represents one variant at the stated endpoint; the intermediate proportions defined in Section~\ref{subsec:mixed_utility_evaluation} were evaluated but are not displayed in these figures. Values are expressed as differences from the corresponding real-only classifier, so positive values indicate higher performance than the real-only reference and negative values indicate lower performance.
+
+% Figure 7.3 replacement caption:
+\caption{Downstream utility of the CTAB-GAN+ ablation variants at the additive endpoint $f=1.0$. At this endpoint, $N$ synthetic-source rows are added to $N$ real-source rows, so the final training sample is 50\% synthetic. One marker is shown per variant. The panels report differences in AP (PR), macro F1, and positive-class recall relative to the real-only reference.}
+
+% Figure 7.4 replacement caption:
+\caption{Downstream utility of the CTAB-GAN+ ablation variants at the replacement endpoint $f=1.0$. At this endpoint, all $N$ training rows are synthetic-source rows. One marker is shown per variant. The panels report differences in AP (PR), macro F1, and positive-class recall relative to the real-only reference.}
+
+% ----------------------------------------------------------------------
+% SECTION 7.3.3: replace the introductory and closing utility paragraphs and
+% update the captions of Figures 7.5 and 7.6.
+% ----------------------------------------------------------------------
+The CTGAN additive and replacement utility figures use the same endpoint comparison. The additive figure reports $f=1.0$, corresponding to equal real-source and synthetic-source row counts, whereas the replacement figure reports $f=1.0$, corresponding to synthetic-only training at the original training-set size. Thus, each figure contains one marker per ablation variant and does not display a curve over the intermediate mixture proportions.
+
+% Figure 7.5 replacement caption:
+\caption{Downstream utility of the CTGAN ablation variants at the additive endpoint $f=1.0$. At this endpoint, $N$ synthetic-source rows are added to $N$ real-source rows, so the final training sample is 50\% synthetic. One marker is shown per variant. The panels report differences in AP (PR), macro F1, and positive-class recall relative to the real-only reference.}
+
+% Figure 7.6 replacement caption:
+\caption{Downstream utility of the CTGAN ablation variants at the replacement endpoint $f=1.0$. At this endpoint, all $N$ training rows are synthetic-source rows. One marker is shown per variant. The panels report differences in AP (PR), macro F1, and positive-class recall relative to the real-only reference.}
+
+The CTGAN figures therefore compare the direction and magnitude of utility differences across ablation variants at a common $f=1.0$ endpoint. They do not support conclusions about the shape of the utility response across mixture proportions; such conclusions require the complete fraction-level curves. Comparisons between targeted variants and the unmodified generator should use A0 as the model baseline, whereas A1 controls for the additional generator-training exposure introduced by uniform augmentation.

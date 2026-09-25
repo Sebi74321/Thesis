@@ -87,6 +87,7 @@ The categorical summary is the arithmetic mean of **feature distances**. Squarin
 - Section 6.3.2: additive utility preserves the real-source **row count**, not necessarily all distinct real records after balancing. Class-count sampling can omit and duplicate rows. Additive f=1 is 1:1 real/synthetic source size. The natural real evaluation prevalence remains unchanged, including in the balanced utility task.
 - Section 6.3.3: AP uses ranked probability scores and does **not** depend on a fixed .5 decision threshold. Accuracy does. Balanced-probe prevalence gives an approximate AP chance reference of .5, not an exact finite-sample guarantee.
 - Section 6.2.4: the real–real bootstrap is context for finite-sample variability, not a universal achievable lower bound or independent-patient validation. The two bootstrap samples can share records because they are drawn from the same evaluation pool.
+- Figures 7.3--7.6 show one preselected endpoint per ablation variant, not all mixture fractions. The endpoint is `f=1.0` in both protocols: additive uses `N` real-source plus `N` synthetic-source rows (50% synthetic in the final sample), while replacement uses `N` synthetic-source rows and no real-source rows. The Results prose and captions must state this explicitly and must not claim that these figures show every mixture proportion. Paste-ready replacements are included in `replacement_passages.tex`.
 
 ### Canonical names and saved fields
 
