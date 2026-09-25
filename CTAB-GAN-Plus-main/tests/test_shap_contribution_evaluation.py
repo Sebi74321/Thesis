@@ -10,6 +10,7 @@ import pytest
 from xai_reweighting.shap_contribution_evaluation import (
     evaluation_records, evaluation_deltas, seed_summary, write_evaluation_reports,
     plot_metric_panels, plot_mixture_curves, plot_utility_heatmap,
+    top_feature_changes, plot_top_feature_changes,
 )
 
 
@@ -141,3 +142,51 @@ def test_notebook_has_separate_tasks_real_deltas_and_seed_sd():
                   "plot_mixture_curves","plot_utility_heatmap","utility.utility_task.drop_duplicates()"]:
         assert token in joined
     assert "LAUNCH = False" in joined
+
+
+def test_top_feature_changes_pair_seeds_and_preserve_selection_coverage():
+    rows=[]
+    for i, seed in enumerate([42,43,44]):
+        for feature, kind, rank in [('lab','continuous',2),('code','categorical',1)]:
+            if feature=='code' and seed==44:
+                continue  # Not in this seed's high-SHAP set, not a zero error.
+            for variant, delta in [('A0',0.),('A5',-.1*(i+1))]:
+                context=dict(feature=feature,kind=kind)
+                rows.append(row(seed,variant,'distribution_discrepancy',.5+i+delta,
+                                'top_shap_feature_variant_metrics.csv',**context))
+                rows.append(row(seed,variant,'shap_rank',rank,
+                                'top_shap_feature_variant_metrics.csv',**context))
+    raw=pd.DataFrame(rows)
+    records=evaluation_records(raw)
+    changes=top_feature_changes(raw,records,evaluation_deltas(records),[42,43,44])
+    lab=changes[(changes.feature=='lab')&(changes.variant=='A5')].iloc[0]
+    assert lab.delta_mean==pytest.approx(-.2)
+    assert lab.delta_std==pytest.approx(.1)
+    assert lab.paired_seeds==3
+    code=changes[(changes.feature=='code')&(changes.variant=='A5')].iloc[0]
+    assert code.metric=='jensen_shannon'
+    assert code.delta_mean==pytest.approx(-.15)
+    assert code.paired_seeds==code.ranked_seeds==2
+    assert code.unavailable_seeds==1
+    assert changes.feature.iloc[0]=='code'  # Rank order, not improvement order.
+    baseline=changes[changes.variant=='A0']
+    np.testing.assert_allclose(baseline.delta_mean,0.)
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    fig=plot_top_feature_changes(changes,top_n=2)
+    assert [ax.get_title() for ax in fig.axes]==['code','lab']
+    assert all('negative = better' in ax.get_ylabel() and ax.get_xlabel() for ax in fig.axes)
+    plt.close(fig)
+    assert plot_top_feature_changes(changes.iloc[:0]) is None
+
+
+def test_top_feature_single_seed_and_missing_baseline_are_not_zero_sd():
+    raw=pd.DataFrame([row(42,'A5','distribution_discrepancy',.2,
+                          'top_shap_feature_variant_metrics.csv',feature='x',kind='continuous')])
+    records=evaluation_records(raw)
+    result=top_feature_changes(raw,records,evaluation_deltas(records),[42,43,44]).iloc[0]
+    assert result.absolute_mean==.2 and result.absolute_n==1
+    assert pd.isna(result.absolute_std)
+    assert pd.isna(result.delta_mean) and pd.isna(result.delta_std)
+    assert result.paired_seeds==0 and result.unavailable_seeds==3

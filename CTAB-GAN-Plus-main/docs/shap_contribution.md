@@ -172,6 +172,16 @@ validated inventory after evaluating more children. Source CSVs remain unchanged
 
 ### Interpretation
 
+The top-SHAP feature section plots **variant-minus-A0 fidelity changes**, with one
+labelled panel per feature and mean ± sample SD of paired generator-seed deltas.
+Negative means improved fidelity. Continuous features use scaled Wasserstein
+distance and categorical features use JS distance; these are not pooled into one
+feature-average score. `study_top_shap_feature_changes.csv` contains absolute
+means/SDs, delta means/SDs, mean baseline SHAP rank and seed coverage. Panels are
+ordered by mean A0 SHAP rank, never by the size of the improvement. When a feature
+is absent from a seed's top diagnostic set, its result is missing, not zero: the
+summary is conditional on selection. `TOP_SHAP_FEATURES` controls the panel count.
+
 Consistent A5 improvements over **both** no-SHAP and shuffled-SHAP, without material
 utility/tail/privacy-proxy regressions, support the usefulness of the SHAP-guided
 prioritisation policy in the tested setting. Mixed or null results should narrow

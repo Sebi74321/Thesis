@@ -150,6 +150,73 @@ def evaluation_deltas(records):
     return result
 
 
+def top_feature_changes(raw, records, pairs, expected_seeds):
+    """Feature-wise A0 changes, conditional on inclusion in each seed's top set."""
+    selected = records[records.domain == "Prioritized feature fidelity"]
+    absolute = seed_summary(selected, expected_seeds).rename(columns={
+        "mean": "absolute_mean", "std": "absolute_std", "n": "absolute_n"})
+    changes = seed_summary(pairs[(pairs.domain == "Prioritized feature fidelity")
+                                 & (pairs.reference == "A0")], expected_seeds, paired=True)
+    changes = changes.rename(columns={"mean": "delta_mean", "std": "delta_std", "n": "paired_seeds"})
+    keys = ["variant", *DIMENSIONS]
+    result = absolute[keys + ["absolute_mean", "absolute_std", "absolute_n"]].merge(
+        changes[keys + ["delta_mean", "delta_std", "paired_seeds", "expected_seeds", "unavailable_seeds"]],
+        on=keys, how="outer", validate="one_to_one")
+    ranks = []
+    for row in raw[(raw.artifact == "top_shap_feature_variant_metrics.csv")
+                   & (raw.metric == "shap_rank")].itertuples(index=False):
+        context = json.loads(row.context)
+        if context.get("variant") == "A0":
+            ranks.append({"seed": row.seed, "feature": context["feature"], "rank": row.value})
+    if ranks:
+        ranks = pd.DataFrame(ranks)
+        if ranks.duplicated(["seed", "feature"]).any():
+            raise ValueError("Duplicate baseline SHAP ranks within a seed")
+        rank_summary = ranks.groupby("feature")["rank"].agg(shap_rank_mean="mean", ranked_seeds="count").reset_index()
+        result = result.merge(rank_summary, on="feature", how="left", validate="many_to_one")
+    else:
+        result = result.assign(shap_rank_mean=np.nan, ranked_seeds=0)
+    return result.sort_values(["shap_rank_mean", "feature", "variant"], na_position="last")
+
+
+def plot_top_feature_changes(changes, *, top_n=10):
+    """One independent, fully labelled subplot per feature and discrepancy metric."""
+    import matplotlib.pyplot as plt
+
+    if top_n < 1:
+        raise ValueError("top_n must be positive")
+    if changes.empty:
+        return None
+    features = changes.sort_values(["shap_rank_mean", "feature"], na_position="last").feature.drop_duplicates().head(top_n)
+    selected = changes[changes.feature.isin(features)]
+    panels = selected[["feature", "metric"]].drop_duplicates()
+    fig, axes = plt.subplots(int(np.ceil(len(panels) / 3)), 3,
+                             figsize=(17, 4.5 * int(np.ceil(len(panels) / 3))), squeeze=False)
+    for ax, panel in zip(axes.flat, panels.itertuples(index=False)):
+        group = selected[(selected.feature == panel.feature) & (selected.metric == panel.metric)]
+        group = group.set_index("variant").reindex(VARIANTS)
+        x = np.arange(len(VARIANTS))
+        ax.scatter(x, group.delta_mean, color="#4C78A8")
+        finite = group.delta_mean.notna() & group.delta_std.notna()
+        ax.errorbar(x[finite], group.loc[finite, "delta_mean"], yerr=group.loc[finite, "delta_std"],
+                    fmt="none", capsize=4, color="#4C78A8")
+        for i, row in enumerate(group.itertuples()):
+            if pd.notna(row.delta_mean):
+                ax.annotate(f"n={int(row.paired_seeds)}", (i, row.delta_mean),
+                            xytext=(4, 5), textcoords="offset points", fontsize=8)
+        ax.axhline(0, color="black", linestyle="--", linewidth=1)
+        ax.set_xticks(x, VARIANTS, rotation=20, ha="right")
+        metric = {"wasserstein_scaled": "Scaled Wasserstein distance",
+                  "jensen_shannon": "Jensen–Shannon distance"}.get(panel.metric, panel.metric)
+        ax.set(title=panel.feature, xlabel="Variant", ylabel=f"{metric}\nChange versus A0 (negative = better)")
+        ax.grid(axis="y", alpha=.2)
+    for ax in axes.flat[len(panels):]:
+        ax.remove()
+    fig.suptitle("Top-SHAP feature fidelity changes — mean ± sample SD of paired seed deltas", y=1.01)
+    fig.tight_layout()
+    return fig
+
+
 def write_evaluation_reports(output_dir, raw=None, plan=None):
     """Refresh display reports without training, evaluation, or fingerprint bypass."""
     output_dir = Path(output_dir)
@@ -166,6 +233,7 @@ def write_evaluation_reports(output_dir, raw=None, plan=None):
         "study_evaluation_summary.csv": seed_summary(records, plan["seeds"]),
         "study_evaluation_paired_seed_deltas.csv": pairs,
         "study_evaluation_delta_summary.csv": seed_summary(pairs, plan["seeds"], paired=True),
+        "study_top_shap_feature_changes.csv": top_feature_changes(raw, records, pairs, plan["seeds"]),
     }
     for name, frame in tables.items():
         atomic_write_csv(output_dir / name, frame)
