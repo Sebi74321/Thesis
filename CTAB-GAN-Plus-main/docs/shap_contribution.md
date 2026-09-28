@@ -170,7 +170,58 @@ rerun evaluations, or discover changed child files. Use the full study's
 `--summarize-only` with its original compatible environment to rebuild the
 validated inventory after evaluating more children. Source CSVs remain unchanged.
 
-### Interpretation
+### Focused thesis figures (no new experiments)
+
+The notebook's **Thesis figures: the evidence for an additional SHAP contribution**
+section exports a focused set instead of relying on large multi-metric heatmaps:
+
+1. **Main results: primary fidelity.** Both architectures' individual paired seed
+   differences for A5 versus no-SHAP, shuffled SHAP, and A0. Negative distance
+   differences favour A5. This directly addresses the SHAP contribution and shows
+   unusually poor seeds instead of hiding them behind an average.
+2. **Main results: utility.** CTGAN's replacement-fraction-1 ordinary-mortality
+   comparisons against both SHAP controls, showing average precision, ROC-AUC,
+   positive recall and positive F1. Positive differences favour A5. CTAB-GAN+
+   and balanced-mortality versions are also exported for appendix comparison.
+3. **Main results: feature-level trade-offs.** Absolute discrepancies across all
+   policies for fixed illustrative features: `temperature_min`, `creatinine_min`,
+   and `creatinine_max`. These use the **full per-feature export**, not only seeds
+   where the feature appeared in a top-SHAP list. Replace the feature list for
+   another dataset. These examples were chosen for discussion, not prospectively
+   specified endpoints or a representative sample of all features.
+
+Each panel labels both axes and finite seed/pair counts. Coloured points identify
+individual seeds consistently, black diamonds indicate means, and whiskers show
+sample SD across seeds (not confidence intervals). Utility tasks are separate;
+replacement fraction 1 is not mixed with the main unadjusted synthetic-only task.
+The existing notebook mixture curves can additionally support the appendix's
+fraction-grid discussion. Keep the predeclared fidelity endpoint separate from
+secondary utility evidence, and do not infer significance from SD bars.
+
+Run from the project directory, without a GPU or original patient data:
+
+```bash
+python -m xai_reweighting.shap_contribution_figures \
+  --study results/shap_contribution_mimic_ctabgan \
+  --study results/shap_contribution_mimic_ctgan \
+  --output-dir results/shap_thesis_figures
+```
+
+Each `--study` may alternatively point to an exported ZIP containing
+`study_plan.json` and `study_evaluation_seed_metrics.csv`. A single study is also
+supported. Archives are read without extraction. Generate the focused seed export
+with `shap_contribution_evaluation` first if it is missing from an older directory.
+No training/resume fingerprints or source CSVs are changed. Different datasets,
+split seeds, stages, or primary endpoints are rejected when combining studies.
+
+Exports include 300-dpi PNGs, vector PDFs, the exact plotted seed values in CSVs,
+and `thesis_figures_manifest.json` with source/configuration provenance and spread
+definitions. Use PDFs in LaTeX for sharp text and lines. The utility export defaults
+to replacement fraction 1; use `--protocol additive --fraction 1` for a 50/50
+real--synthetic training mixture. Set `--features feature1 feature2` to choose
+different continuous features, or pass `--features` without names to omit them.
+
+### Interpreting the broader diagnostic panels
 
 The top-SHAP feature section plots **variant-minus-A0 fidelity changes**, with one
 labelled panel per feature and mean ± sample SD of paired generator-seed deltas.
