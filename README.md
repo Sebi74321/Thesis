@@ -1,6 +1,6 @@
 # Explainability and auditability of synthetic health data
 
-Research code and thesis material for comparing tabular GANs and studying
+Research code for comparing tabular GANs and studying
 XAI-guided weighted retraining on MIMIC and WiDS.
 
 The implementation supports CTAB-GAN+, CTGAN, and the DP-CGANS architecture.
@@ -36,12 +36,17 @@ CUDA experiments use the same scientific configuration.
 | `CTAB-GAN-Plus-main/notebooks/` | Experiment orchestration and result inspection |
 | `CTAB-GAN-Plus-main/tests/` | Unit and integration tests |
 | `CTAB-GAN-Plus-main/docs/` | Protocol details and operating instructions |
-| `*.tex`, `*.bib` | Thesis text, references, and result tables |
+| `requirements-*.in` | Python dependency lists used by the setup script |
 | `setup_env.sh`, `run_h100.slurm` | Environment setup and example GPU job |
 
 The existing project directory name is retained so saved configurations,
 notebooks, and cluster commands keep working. Results, logs, caches, and local
 tooling files are not intended for version control.
+
+Healthcare datasets and generated records are excluded from version control.
+Before running an experiment, place the approved local dataset at the
+`data_path` specified in its JSON configuration. The existing MIMIC-IV and
+GOSSIS files remain on this machine; a new checkout needs its own dataset copy.
 
 ## Experiments
 

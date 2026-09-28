@@ -6,7 +6,12 @@
 logs/
 setup_thesis310*.log
 CTAB-GAN-Plus-main/results/
-CTAB-GAN-Plus-main/Real_Datasets/.backups/
+CTAB-GAN-Plus-main/Real_Datasets/
+CTAB-GAN-Plus-main/Fake_Datasets/
+CTAB-GAN-Plus-main/artifacts/
+*.csv
+*.parquet
+*.feather
 *-checkpoint*
 
 # Local tools and generated scratch files
@@ -16,5 +21,6 @@ CTAB-GAN-Plus-main/Real_Datasets/.backups/
 .ipynb_checkpoints/
 .tmp/
 /tmp/
+/output/
 .coverage
 htmlcov/

@@ -93,7 +93,7 @@ _thesis_setup_environment() (
   if command -v sha256sum >/dev/null 2>&1; then
     SETUP_FINGERPRINT="$(
       {
-        sha256sum "$REPO_ROOT/requirements-base.txt" "$REPO_ROOT/requirements-generators.txt" "$REPO_ROOT/setup_env.sh"
+        sha256sum "$REPO_ROOT/requirements-base.in" "$REPO_ROOT/requirements-generators.in" "$REPO_ROOT/setup_env.sh"
         printf '%s\n' "$BACKEND" "$TORCH_INDEX_URL"
       } | sha256sum | cut -d' ' -f1
     )"
@@ -119,13 +119,13 @@ _thesis_setup_environment() (
       setuptools==75.1.0 \
       wheel==0.44.0
 
-    "$PIP" install -r "$REPO_ROOT/requirements-base.txt"
+    "$PIP" install -r "$REPO_ROOT/requirements-base.in"
     "$PIP" install \
       torch==2.7.0 \
       torchvision==0.22.0 \
       torchaudio==2.7.0 \
       --index-url "$TORCH_INDEX_URL"
-    "$PIP" install -r "$REPO_ROOT/requirements-generators.txt"
+    "$PIP" install -r "$REPO_ROOT/requirements-generators.in"
     "$PIP" install \
       notebook==7.2.2 \
       jupyterlab==4.2.5 \
