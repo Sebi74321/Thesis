@@ -1,0 +1,300 @@
+import json
+from types import SimpleNamespace
+import warnings
+
+import pandas as pd
+import pytest
+from pandas.errors import PerformanceWarning
+
+from xai_reweighting.run_ablation import (
+    VALID_VARIANTS,
+    _adapter,
+    _build_controlled_deltas,
+    _dp_transformer_context,
+    _fit_and_save_training,
+    _freeze_or_validate_dp_transformer,
+    build_parser,
+    run_experiment,
+)
+
+
+class FakeGenerator:
+    def fit(self, df):
+        self.df = df.copy(deep=True).reset_index(drop=True)
+
+    def sample(self, n):
+        return self.df.sample(n=n, replace=True, random_state=42).reset_index(drop=True)
+
+    def save_checkpoint(self, path):
+        path.write_text("fake checkpoint", encoding="utf-8")
+
+
+def test_dp_transformer_is_frozen_atomically_and_strictly_validated(tmp_path):
+    training = pd.DataFrame(
+        {"value": [1.0, 2.0, 3.0], "target": pd.Series([0, 1, 0], dtype="int64")}
+    )
+    context = _dp_transformer_context(
+        training,
+        train_indices=[0, 2, 4],
+        categorical_columns=["target"],
+        source_data_sha256="source-hash",
+    )
+    source = tmp_path / "A0" / "fitted_transformer.pkl"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"A0 fitted transformer")
+    frozen = tmp_path / "shared" / "fitted_transformer_A0.pkl"
+    manifest = tmp_path / "transformer_manifest.json"
+
+    result = _freeze_or_validate_dp_transformer(
+        source, frozen, manifest, context
+    )
+
+    assert result == frozen.resolve()
+    assert frozen.read_bytes() == b"A0 fitted transformer"
+    stored = json.loads(manifest.read_text(encoding="utf-8"))
+    assert stored["compatibility"] == context
+    assert stored["source_variant"] == "A0"
+    assert _freeze_or_validate_dp_transformer(
+        source, frozen, manifest, context
+    ) == frozen.resolve()
+
+    incompatible = dict(context, source_data_sha256="changed")
+    with pytest.raises(ValueError, match="compatibility mismatch"):
+        _freeze_or_validate_dp_transformer(
+            source, frozen, manifest, incompatible
+        )
+
+
+def test_dp_transformer_cache_detects_artifact_corruption(tmp_path):
+    training = pd.DataFrame({"value": [1.0, 2.0], "target": [0, 1]})
+    context = _dp_transformer_context(
+        training, [0, 1], ["target"], "source-hash"
+    )
+    source = tmp_path / "A0" / "fitted_transformer.pkl"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"valid")
+    frozen = tmp_path / "shared" / "fitted_transformer_A0.pkl"
+    manifest = tmp_path / "transformer_manifest.json"
+    _freeze_or_validate_dp_transformer(source, frozen, manifest, context)
+    frozen.write_bytes(b"corrupt")
+
+    with pytest.raises(ValueError, match="hash does not match"):
+        _freeze_or_validate_dp_transformer(source, frozen, manifest, context)
+
+
+def test_progress_cli_modes():
+    parser = build_parser()
+    assert parser.parse_args(["--config", "config.json"]).progress == "auto"
+    assert parser.parse_args(
+        ["--config", "config.json", "--progress", "off"]
+    ).progress == "off"
+
+
+@pytest.mark.parametrize("generator_name", ["ctabgan_plus", "ctgan", "dp_cgan"])
+def test_ablation_adapter_uses_generator_registry(generator_name, tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_create(name, generator_config, **kwargs):
+        captured.update(name=name, generator_config=generator_config, **kwargs)
+        return object()
+
+    monkeypatch.setattr("xai_reweighting.generator_adapters.create_generator", fake_create)
+    result = _adapter(
+        {"generator_name": generator_name, "generator": {"epochs": 2}},
+        "cpu",
+        42,
+        "off",
+        "test training",
+        tmp_path / "backend",
+    )
+
+    assert result is not None
+    assert captured["name"] == generator_name
+    assert captured["generator_config"] == {"epochs": 2}
+    assert captured["work_dir"] == tmp_path / "backend"
+
+
+def test_dp_weighted_fit_saves_non_private_checkpoint_without_accounting(tmp_path):
+    model = FakeGenerator()
+    training = pd.DataFrame({"x": range(20), "target": [0, 1] * 10})
+    diagnostics = _fit_and_save_training(
+        model,
+        training,
+        "A5",
+        tmp_path,
+        generator_name="dp_cgan",
+        generator_config={
+            "batch_size": 10,
+            "epochs": 2,
+            "discriminator_steps": 10,
+            "private": False,
+        },
+    )
+
+    assert diagnostics["checkpoint_saved"] is True
+    assert (tmp_path / "model_checkpoint_A5.pkl").exists()
+    assert diagnostics["differential_privacy_enabled"] is False
+    assert diagnostics["backend_mode"] == "non_private_baseline"
+    assert diagnostics["transformer_reused"] is False
+    assert diagnostics["saved_transformer"] is None
+    assert diagnostics["saved_transformer_sha256"] is None
+    assert not (tmp_path / "privacy_accounting_A5.json").exists()
+
+
+def test_controlled_deltas_use_a0_and_real_utility_references():
+    metrics = {
+        "A0": {"utility_mortality_roc_auc": 0.60, "detector_auc": 0.90},
+        "A1": {"utility_mortality_roc_auc": 0.65, "detector_auc": 0.85},
+        "A2": {"utility_mortality_roc_auc": 0.70, "detector_auc": 0.80},
+        "A3": {"utility_mortality_roc_auc": 0.72, "detector_auc": 0.78},
+        "A5": {"utility_mortality_roc_auc": 0.75, "detector_auc": 0.70},
+    }
+    real_only = pd.DataFrame(
+        {
+            "utility_task": ["mortality", "mortality"],
+            "roc_auc": [0.80, 0.82],
+            "repeat": [0, 1],
+            "seed": [42, 1042],
+        }
+    )
+    summary, deltas = _build_controlled_deltas(
+        pd.DataFrame([{"variant": key, **value} for key, value in metrics.items()]),
+        metrics,
+        real_only,
+        [{"name": "mortality"}],
+    )
+
+    a5 = summary.set_index("variant").loc["A5"]
+    assert a5["delta_utility_mortality_roc_auc_vs_A0"] == pytest.approx(0.15)
+    assert a5["real_baseline_utility_mortality_roc_auc"] == pytest.approx(0.81)
+    assert a5["delta_utility_mortality_roc_auc_vs_real"] == pytest.approx(-0.06)
+    assert "sequential_comparison" not in summary.columns
+    assert not any(column.endswith("_vs_previous") for column in summary.columns)
+    assert set(deltas["reference_type"]) == {
+        "synthetic_baseline",
+        "real_data_utility_baseline",
+    }
+    assert set(deltas["control"]) == {"A0", "REAL"}
+
+
+def test_controlled_deltas_do_not_fragment_wide_summary():
+    metrics = {
+        variant: {f"metric_{index}": float(index + offset) for index in range(150)}
+        for variant, offset in (("A0", 0), ("A1", 1))
+    }
+    summary_input = pd.DataFrame(
+        [{"variant": variant, **values} for variant, values in metrics.items()]
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", PerformanceWarning)
+        summary, _ = _build_controlled_deltas(summary_input, metrics, pd.DataFrame(), [])
+
+    assert not any(issubclass(item.category, PerformanceWarning) for item in caught)
+    assert summary.set_index("variant").loc["A1", "delta_metric_149_vs_A0"] == 1.0
+
+
+def test_all_six_variants_end_to_end_with_fake_generator(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    data_dir = project / "data"
+    data_dir.mkdir(parents=True)
+    data = pd.DataFrame(
+        {
+            "continuous": list(range(100)),
+            "category": ["a", "b"] * 50,
+            "target": [0] * 80 + [1] * 20,
+        }
+    )
+    data.loc[:9, "category"] = [f"rare_{i}" for i in range(10)]
+    data.to_csv(data_dir / "input.csv", index=False)
+
+    def fake_detector(real, synthetic, categorical_cols, **kwargs):
+        return SimpleNamespace(
+            metrics={"detector_auc": 0.5},
+            shap_signed=pd.Series({"continuous": 1.0, "category": 0.5, "target": 0.25}),
+            shap_importance=pd.Series(
+                {"continuous": 1.0, "category": 0.5, "target": 0.25}
+            ),
+        )
+
+    def fake_evaluation(*args, **kwargs):
+        details = pd.DataFrame({"feature": ["continuous"], "metric": [1.0]})
+        return {"score": 1.0, "utility_mortality_positive_recall": 0.5,
+                "mean_wasserstein_scaled": 0.1, "privacy_exact_match_rate": 0.0}, details
+
+    monkeypatch.setattr("xai_reweighting.run_ablation.train_detector", fake_detector)
+    monkeypatch.setattr("xai_reweighting.run_ablation.evaluate_variant", fake_evaluation)
+    config = {
+        "data_path": "data/input.csv",
+        "target_col": "target",
+        "categorical_cols": ["category", "target"],
+        "continuous_cols": ["continuous"],
+        "generator": {"categorical_columns": ["category", "target"]},
+        "rare_categories": {"enabled": True, "min_count": 6},
+        "seed": 42,
+        "frozen": False,
+        "weighting": {"alpha": 1.0, "gamma": 0.25, "top_k": 2, "w_max": 2.0},
+        "mixed_utility": {
+            "enabled": True,
+            "additive_fractions": [0.0, 1.0],
+            "replacement_fractions": [0.0, 1.0],
+            "repeats": 1,
+            "n_estimators": 5,
+        },
+    }
+    output = run_experiment(
+        config,
+        project,
+        "val",
+        "cpu",
+        VALID_VARIANTS,
+        output_override=project / "results" / "integration",
+        adapter_factory=FakeGenerator,
+    )
+    summary = pd.read_csv(output / "ablation_summary.csv")
+    assert summary["variant"].tolist() == list(VALID_VARIANTS)
+    assert (output / "rare_category_mapping.json").is_file()
+    for variant in VALID_VARIANTS:
+        generated = pd.read_csv(output / f"synthetic_{variant}.csv")
+        assert not generated["category"].str.startswith("rare_").any()
+    deltas = pd.read_csv(output / "ablation_deltas.csv")
+    assert set(deltas["control"]) == {"A0", "REAL"}
+    assert "comparison_vs_A0" in summary
+    assert "comparison_vs_real" in summary
+    assert all((output / f"metrics_{variant}.json").exists() for variant in VALID_VARIANTS)
+    assert all((output / f"model_checkpoint_{variant}.pt").exists() for variant in VALID_VARIANTS)
+    top_shap_metrics = pd.read_csv(output / "top_shap_feature_variant_metrics.csv")
+    assert set(top_shap_metrics["variant"]) == set(VALID_VARIANTS)
+    assert {"distribution_discrepancy", "delta_discrepancy_vs_A0"}.issubset(
+        top_shap_metrics.columns
+    )
+    assert (output / "utility_real_only_baseline.csv").exists()
+    assert (output / "utility_mixture_results.csv").exists()
+    assert (output / "utility_mixture_summary.csv").exists()
+    mixture = pd.read_csv(output / "utility_mixture_results.csv")
+    assert set(mixture["variant"]) == set(VALID_VARIANTS)
+    assert set(mixture["protocol"]) == {"additive", "replacement"}
+
+    # Simulate an unfinished A5 and a preprocessing code upgrade. Recovery
+    # must only fit A5 and preserve completed datasets and metrics byte-for-byte.
+    (output / '.A5.complete').unlink()
+    protected = {p: p.read_bytes() for v in VALID_VARIANTS if v != 'A5'
+                 for p in (output / f'synthetic_{v}.csv', output / f'metrics_{v}.json')}
+    fits = []
+
+    class ResumedGenerator(FakeGenerator):
+        def fit(self, df):
+            fits.append(len(df))
+            super().fit(df)
+
+    monkeypatch.setattr('xai_reweighting.run_ablation._code_hash', lambda _: 'patched-code')
+    run_experiment(config, project, 'val', 'cpu', VALID_VARIANTS,
+                   output_override=output, resume=True, resume_allow_code_change=True,
+                   adapter_factory=ResumedGenerator)
+    assert len(fits) == 1
+    assert all(p.read_bytes() == contents for p, contents in protected.items())
+    manifest = json.loads((output / 'manifest.json').read_text())
+    assert manifest['status'] == 'complete'
+    recovery = json.loads((output / manifest['code_change_recovery_files'][0]).read_text())
+    assert recovery['completed_variants_preserved'] == list(VALID_VARIANTS[:-1])
+    assert recovery['previous_manifest']['code_sha256'] != manifest['code_sha256']

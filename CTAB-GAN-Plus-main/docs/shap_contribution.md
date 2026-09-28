@@ -1,0 +1,246 @@
+# Does SHAP add value?
+
+This focused study tests the feature-prioritisation policy, not merely whether
+resampling changes the generated distribution. It uses the existing generator,
+preprocessing, A0 audit, region deficits, augmentation and evaluation pipeline.
+The normal A0–A5 command and its default variants are unchanged.
+
+| Variant | Feature priority before top-k normalisation | Question |
+| --- | --- | --- |
+| A0 | No augmentation | How does the method compare with the original generator? |
+| A5_NO_SHAP | 0.6 mismatch + 0.4 tail | Does A5 outperform a distribution-only policy? |
+| A5_SHUFFLED_SHAP | 0.5 permuted SHAP + 0.3 mismatch + 0.2 tail | Does the assignment of SHAP importance to features matter? |
+| A5 | 0.5 SHAP + 0.3 mismatch + 0.2 tail | Full proposed method |
+
+SHAP changes priorities and potentially the top-k features, which changes row
+weights and the augmentation sampling distribution. **All weighted controls still
+use the same distributional region deficits.** SHAP does not supply those deficits.
+The no-SHAP control renormalises the remaining terms to preserve the 3:2 ratio.
+It compares two policies; it does not isolate an additive causal coefficient.
+
+Every seed trains A0 once and derives a common set of audit signals. All three
+weighted fits retain every original training row and use the same augmentation
+size, alpha, cap, top-k, preprocessing policy and generator settings. The fixed
+split seed is independent of generator seeds. The existing backend-specific
+transformer policy is retained, including within-run DP-CGANS transformer reuse
+when enabled. No validation/test rows enter fitting or weighting.
+
+The shuffled control deterministically permutes the existing SHAP magnitudes
+over feature names. Its seed and source-feature mapping are saved. Fixed points,
+ties and all-zero signals are retained, not rerolled to manufacture a difference.
+It preserves the SHAP magnitude distribution, **not necessarily the final weight
+distribution**. Inspect weight SD, cap fraction, maximum sampling probability and
+sampling ESS (`1 / sum(p_i**2)`, with `p_i = w_i / sum(w)`). ESS describes the
+augmentation probabilities, not an independent-patient sample size or a privacy
+guarantee. Original row weights, selection counts and feature scores remain saved.
+
+## Run and resume
+
+From `CTAB-GAN-Plus-main`, with the project environment activated:
+
+```bash
+python -m xai_reweighting.run_shap_contribution \
+  --config configs/mimic_ctabgan.json \
+  --output-dir results/shap_contribution_mimic_ctabgan \
+  --device cuda:0 --seeds 42,43,44 --stage val --dry-run
+```
+
+Remove `--dry-run` to train. Use `--device cpu` locally, or choose an existing
+CTGAN, DP-CGANS or WiDS config; use a different output directory for each study.
+No scientific generator or evaluation settings are reduced for authoritative runs.
+The three-seed minimum means **12 GAN fits**, not a full sensitivity grid. At the
+reported 60 minutes per six-variant MIMIC run, linear planning gives approximately
+2 hours, or 2.5 hours with the default 25% margin. This is not a runtime guarantee;
+WiDS needs its own measured `--baseline-run-minutes`. The launch budget defaults
+to 20 hours and does not terminate an in-flight seed run.
+
+Detached GPU execution:
+
+```bash
+mkdir -p logs
+nohup python -u -m xai_reweighting.run_shap_contribution \
+  --config configs/mimic_ctabgan.json \
+  --output-dir results/shap_contribution_mimic_ctabgan \
+  --device cuda:0 --seeds 42,43,44 --stage val --progress on \
+  > logs/shap_contribution_mimic_ctabgan.log 2>&1 < /dev/null &
+echo $! > logs/shap_contribution_mimic_ctabgan.pid
+tail -f logs/shap_contribution_mimic_ctabgan.log
+```
+
+Add `--resume` to the same command after an interruption. Completed seeds are
+validated and skipped; incomplete seeds use the existing variant-level resume.
+An interrupted GAN fit may need to restart: this is not epoch-level checkpointing.
+Data, code, config, endpoint, seeds and device must match the saved study plan.
+Keep logs and results on persistent storage. `nohup` cannot survive node/pod death.
+
+`--smoke` runs seed 42 only with the usual reduced smoke settings and marks the
+study as non-thesis output. It cannot be combined with `--stage test`.
+Final test studies require the input config's `frozen: true` and a separate output
+directory. Do not select configurations on test results.
+
+## Endpoints and reports
+
+The default primary endpoint is `mean_wasserstein_scaled` (lower is better).
+It is saved **before training**, not selected from favourable outcomes. Change it
+before launching via `--primary-metric NAME --primary-direction higher|lower`,
+using a numeric column from `ablation_summary.csv`. If downstream utility is the
+central thesis claim, select its endpoint deliberately instead of relying on the
+fidelity default. This local frozen plan is not a public preregistration.
+
+All regular configured evaluations still run: global and tail/rare fidelity,
+detector, both utility tasks, additive/replacement utility, privacy proxies and
+enabled diagnostics, including discriminator snapshots where supported. Each
+`seed42/`, `seed43/`, `seed44/` directory has the usual complete artifacts.
+
+Study-level outputs:
+
+- `study_primary_pairs.csv`, `study_primary_summary.csv`, `study_primary_pairs.png`:
+  paired-seed evidence for A5 versus each control; positive primary improvement
+  always means better. The figure shows the two SHAP-specific contrasts.
+- `study_paired_deltas.csv`, `study_delta_spread.csv`: all available matched
+  variant metrics, including A0 contrasts. Raw deltas are **variant minus control**;
+  negative is favourable for discrepancy metrics, positive for utility scores.
+  Detector and privacy-proxy changes require contextual interpretation.
+- `study_run_metrics.csv`, `study_seed_spread.csv`: absolute measurements and
+  mean, sample SD, min/max, quartiles and availability across generator seeds.
+  Utility repeats are averaged within each generator seed before computing spread.
+  Task, protocol, mixture fraction, feature and diagnostic scope stay separate.
+  Real-only baselines remain in the raw inventory and standard child artifacts.
+- `study_weight_diagnostics.csv`: concentration and magnitude of sampling weights.
+- `study_mechanism_diagnostics.csv`: selected-feature overlap, priority changes
+  and total variation between augmentation probabilities and A5. Zero SHAP signals
+  or identical sampling probabilities make a shuffled comparison uninformative;
+  this is reported, not hidden by rerolling the permutation.
+- `study_run_coverage.csv`, `study_artifact_coverage.csv`, `study_interpretation.json`:
+  completion, artifact coverage and interpretation limits. Undefined results stay
+  missing; a missing comparison is not treated as zero.
+
+`--summarize-only` refreshes these reports from completed children without GAN
+training. It does not rerun their evaluations. To reevaluate a child, use the
+existing `run_evaluation --run-dir results/.../seed42` command (the saved control
+variants are supported), then summarize the study with the original arguments.
+Never pool incompatible software/evaluation protocols as if they were replicates.
+
+Open `notebooks/shap_contribution_study.ipynb` to launch/resume, inspect absolute
+values, plot paired deltas and inspect weight concentration. Existing A4 versus A2
+results can provide complementary evidence, but this focused run does not retrain
+A2/A4 or silently pool earlier runs with different configurations/code versions.
+
+## What the study can support
+
+### Extended notebook evaluation and generator-seed SD
+
+The notebook now includes global fidelity (Wasserstein, KS, JS distance and
+correlation), tail-mass/quantile errors, rare-category/outcome errors, detector
+metrics, nearest-neighbour privacy proxies, both mortality tasks, all configured
+mixture fractions, training prevalence, and feature-level fidelity. Utility
+includes ROC-AUC, average precision, accuracy, balanced accuracy, macro
+precision/recall/F1, and positive-class precision/recall/F1. Separate figures
+keep balanced mortality distinct from natural-prevalence mortality.
+
+Absolute tables and utility heatmaps report mean ± **sample SD across generator
+seeds** (`ddof=1`), after averaging classifier repetitions inside each seed.
+Plots show mean and SD error bars, not confidence intervals. Availability counts
+remain visible; SD for one seed is undefined. Mixture curves and fixed-fraction
+delta panels compare with task-specific real-only utility, while other metric
+panels compare with A0. SHAP-control tables retain the no-SHAP and shuffled-SHAP
+contrasts. Deltas are calculated within each seed before their SD is calculated.
+
+New report files are `study_evaluation_seed_metrics.csv`,
+`study_evaluation_summary.csv`, `study_evaluation_paired_seed_deltas.csv`, and
+`study_evaluation_delta_summary.csv`. The original comprehensive reports and
+predeclared primary endpoint are unchanged. Main synthetic-only utility and
+replacement fraction 1 remain separate because their forest settings and class
+resampling may differ. Legacy main binary balanced accuracy is taken from the
+unambiguous macro-recall field (the same quantity), avoiding the flattened
+`mortality_balanced_accuracy` naming collision without modifying source outputs.
+
+To create these display reports for an **existing** study after updating the code:
+
+```bash
+python -m xai_reweighting.shap_contribution_evaluation \
+  --study-dir results/shap_contribution_mimic_ctabgan
+```
+
+The notebook's “Full evaluation across generator seeds” cell does the same.
+This reporting-only refresh reads the saved `study_run_metrics.csv` inventory;
+it needs no GAN fits, original data, or GPU and does not enforce the current
+training-code hash. It does **not** bypass provenance checks for training/resume,
+rerun evaluations, or discover changed child files. Use the full study's
+`--summarize-only` with its original compatible environment to rebuild the
+validated inventory after evaluating more children. Source CSVs remain unchanged.
+
+### Focused thesis figures (no new experiments)
+
+The notebook's **Thesis figures: the evidence for an additional SHAP contribution**
+section exports a focused set instead of relying on large multi-metric heatmaps:
+
+1. **Main results: primary fidelity.** Both architectures' individual paired seed
+   differences for A5 versus no-SHAP, shuffled SHAP, and A0. Negative distance
+   differences favour A5. This directly addresses the SHAP contribution and shows
+   unusually poor seeds instead of hiding them behind an average.
+2. **Main results: utility.** CTGAN's replacement-fraction-1 ordinary-mortality
+   comparisons against both SHAP controls, showing average precision, ROC-AUC,
+   positive recall and positive F1. Positive differences favour A5. CTAB-GAN+
+   and balanced-mortality versions are also exported for appendix comparison.
+3. **Main results: feature-level trade-offs.** Absolute discrepancies across all
+   policies for fixed illustrative features: `temperature_min`, `creatinine_min`,
+   and `creatinine_max`. These use the **full per-feature export**, not only seeds
+   where the feature appeared in a top-SHAP list. Replace the feature list for
+   another dataset. These examples were chosen for discussion, not prospectively
+   specified endpoints or a representative sample of all features.
+
+Each panel labels both axes and finite seed/pair counts. Coloured points identify
+individual seeds consistently, black diamonds indicate means, and whiskers show
+sample SD across seeds (not confidence intervals). Utility tasks are separate;
+replacement fraction 1 is not mixed with the main unadjusted synthetic-only task.
+The existing notebook mixture curves can additionally support the appendix's
+fraction-grid discussion. Keep the predeclared fidelity endpoint separate from
+secondary utility evidence, and do not infer significance from SD bars.
+
+Run from the project directory, without a GPU or original patient data:
+
+```bash
+python -m xai_reweighting.shap_contribution_figures \
+  --study results/shap_contribution_mimic_ctabgan \
+  --study results/shap_contribution_mimic_ctgan \
+  --output-dir results/shap_thesis_figures
+```
+
+Each `--study` may alternatively point to an exported ZIP containing
+`study_plan.json` and `study_evaluation_seed_metrics.csv`. A single study is also
+supported. Archives are read without extraction. Generate the focused seed export
+with `shap_contribution_evaluation` first if it is missing from an older directory.
+No training/resume fingerprints or source CSVs are changed. Different datasets,
+split seeds, stages, or primary endpoints are rejected when combining studies.
+
+Exports include 300-dpi PNGs, vector PDFs, the exact plotted seed values in CSVs,
+and `thesis_figures_manifest.json` with source/configuration provenance and spread
+definitions. Use PDFs in LaTeX for sharp text and lines. The utility export defaults
+to replacement fraction 1; use `--protocol additive --fraction 1` for a 50/50
+real--synthetic training mixture. Set `--features feature1 feature2` to choose
+different continuous features, or pass `--features` without names to omit them.
+
+### Interpreting the broader diagnostic panels
+
+The top-SHAP feature section plots **variant-minus-A0 fidelity changes**, with one
+labelled panel per feature and mean ± sample SD of paired generator-seed deltas.
+Negative means improved fidelity. Continuous features use scaled Wasserstein
+distance and categorical features use JS distance; these are not pooled into one
+feature-average score. `study_top_shap_feature_changes.csv` contains absolute
+means/SDs, delta means/SDs, mean baseline SHAP rank and seed coverage. Panels are
+ordered by mean A0 SHAP rank, never by the size of the improvement. When a feature
+is absent from a seed's top diagnostic set, its result is missing, not zero: the
+summary is conditional on selection. `TOP_SHAP_FEATURES` controls the panel count.
+
+Consistent A5 improvements over **both** no-SHAP and shuffled-SHAP, without material
+utility/tail/privacy-proxy regressions, support the usefulness of the SHAP-guided
+prioritisation policy in the tested setting. Mixed or null results should narrow
+the claim to auditability or metric-specific benefits, not be hidden in an average.
+Distribution movement alone is not evidence of additional SHAP benefit.
+
+Three generator seeds give descriptive training stability on one fixed split,
+not strong significance evidence or population-level uncertainty. One permutation
+per generator seed is a negative control, not a permutation test. It cannot show
+that SHAP is superior to every alternative feature-importance method. The study
+reports observations and spread; it does not automatically declare a winner.

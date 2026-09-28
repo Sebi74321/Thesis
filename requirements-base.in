@@ -1,0 +1,10 @@
+numpy==1.26.4
+pandas>=1.5,<3
+scipy>=1.9,<2
+scikit-learn>=1.2,<2
+shap>=0.44,<1
+dython>=0.7,<1
+tqdm>=4.64,<5
+matplotlib>=3.6,<4
+seaborn>=0.12,<1
+pytest>=7,<9

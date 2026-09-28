@@ -8,9 +8,12 @@ from torch.nn import functional as F
 from torch.nn import (Dropout, LeakyReLU, Linear, Module, ReLU, Sequential,
 Conv2d, ConvTranspose2d, Sigmoid, init, BCELoss, CrossEntropyLoss,SmoothL1Loss,LayerNorm)
 from model.synthesizer.transformer import ImageTransformer,DataTransformer
+from model.synthesizer.snapshot_schedule import snapshot_epochs
 from model.privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import copy
+import sys
+import time
 
 
 class Classifier(Module):
@@ -348,7 +351,14 @@ class CTABGANSynthesizer:
                  l2scale=1e-5,
                  batch_size=500,
                  epochs=150,
-                snapshot_frq=25):
+                 snapshot_frq=25,
+                 device=None,
+                 progress='auto',
+                 progress_label='CTAB-GAN+',
+                 mixture_max_iter=500,
+                 mixture_n_init=3,
+                 mixture_tol=1e-3,
+                 snapshot_schedule=None):
                  
 
         self.random_dim = random_dim
@@ -359,11 +369,27 @@ class CTABGANSynthesizer:
         self.l2scale = l2scale
         self.batch_size = batch_size
         self.epochs = epochs
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            device if device is not None else ("cuda:0" if torch.cuda.is_available() else "cpu")
+        )
         self.snapshot_frq = snapshot_frq
+        self.snapshot_schedule = copy.deepcopy(snapshot_schedule)
+        self.snapshot_epochs = snapshot_epochs(epochs, snapshot_frq, snapshot_schedule)
+        self._snapshot_epoch_set = set(self.snapshot_epochs)
+        if progress not in {'auto', 'on', 'off'}:
+            raise ValueError("progress must be 'auto', 'on', or 'off'")
+        self.progress = progress
+        self.progress_label = progress_label
+        self.mixture_max_iter = int(mixture_max_iter)
+        self.mixture_n_init = int(mixture_n_init)
+        self.mixture_tol = float(mixture_tol)
+        self.training_history = []
+        self.mixture_diagnostics = []
 
     def fit(self, train_data=pd.DataFrame, categorical=[], mixed={}, general=[], non_categorical=[], type={}):
 
+        if self.snapshot_epochs and self.progress != 'off':
+            print(f"{self.progress_label} snapshot epochs: {self.snapshot_epochs}", flush=True)
         problem_type = None
         target_index=None
         if type:
@@ -371,9 +397,24 @@ class CTABGANSynthesizer:
             if problem_type:
                 target_index = train_data.columns.get_loc(type[problem_type])
 
-        self.transformer = DataTransformer(train_data=train_data, categorical_list=categorical, mixed_dict=mixed, general_list=general, non_categorical_list=non_categorical)
-        self.transformer.fit() 
+        self.transformer = DataTransformer(
+            train_data=train_data,
+            categorical_list=categorical,
+            mixed_dict=mixed,
+            general_list=general,
+            non_categorical_list=non_categorical,
+            mixture_max_iter=self.mixture_max_iter,
+            mixture_n_init=self.mixture_n_init,
+            mixture_tol=self.mixture_tol,
+        )
+        try:
+            self.transformer.fit()
+        finally:
+            self.mixture_diagnostics = list(self.transformer.mixture_diagnostics)
         train_data = self.transformer.transform(train_data.values)
+        if (train_data.ndim != 2 or train_data.shape[1] != self.transformer.output_dim
+                or not np.isfinite(train_data).all()):
+            raise RuntimeError('Transformer produced unusable encoded training data')
         data_sampler = Sampler(train_data, self.transformer.output_info)
         data_dim = self.transformer.output_dim
         self.cond_generator = Cond(train_data, self.transformer.output_info)
@@ -426,7 +467,46 @@ class CTABGANSynthesizer:
         discriminator_snap = []
         
         steps_per_epoch = max(1, len(train_data) // self.batch_size)
-        for i in tqdm(range(self.epochs)):
+        interactive_progress = self.progress == 'on' or (
+            self.progress == 'auto' and sys.stderr.isatty()
+        )
+        epoch_iterator = tqdm(
+            range(self.epochs),
+            desc=self.progress_label,
+            unit='epoch',
+            dynamic_ncols=True,
+            disable=not interactive_progress,
+        )
+        report_interval = max(1, self.epochs // 20)
+        progress_started = time.monotonic()
+        self.training_history = []
+
+        def epoch_mean(name, tensor, updates, epoch_number):
+            value = float((tensor / updates).cpu().item())
+            if not np.isfinite(value):
+                raise FloatingPointError(
+                    f"Non-finite {name} after epoch {epoch_number}"
+                )
+            return value
+
+        if self.progress != 'off' and not interactive_progress:
+            print(
+                f"{self.progress_label}: starting {self.epochs} epochs",
+                file=sys.stderr,
+                flush=True,
+            )
+        for i in epoch_iterator:
+            epoch_totals = {
+                name: torch.zeros((), device=self.device)
+                for name in (
+                    'discriminator_real', 'discriminator_fake', 'gradient_penalty',
+                    'generator', 'conditional', 'information',
+                    'classifier_real', 'classifier_fake',
+                )
+            }
+            discriminator_updates = 0
+            generator_updates = 0
+            classifier_updates = 0
             for id_ in range(steps_per_epoch):
 				
                 
@@ -463,20 +543,24 @@ class CTABGANSynthesizer:
                     
 
                     d_real = -torch.mean(d_real)
+                    epoch_totals['discriminator_real'] += d_real.detach()
                     d_real.backward() 
                     
 
                     d_fake,_ = discriminator(fake_cat_d)
                     
                     d_fake = torch.mean(d_fake)
+                    epoch_totals['discriminator_fake'] += d_fake.detach()
 
                     d_fake.backward() 
                     
                     pen = calc_gradient_penalty_slerp(discriminator, real_cat, fake_cat,  self.Dtransformer , self.device)
+                    epoch_totals['gradient_penalty'] += pen.detach()
 
                     pen.backward()
                 
                     optimizerD.step()
+                    discriminator_updates += 1
                     
                 noisez = torch.randn(self.batch_size, self.random_dim, device=self.device)
                 
@@ -505,12 +589,16 @@ class CTABGANSynthesizer:
                 
 
                 g = -torch.mean(y_fake) + cross_entropy
+                epoch_totals['generator'] += g.detach()
+                epoch_totals['conditional'] += cross_entropy.detach()
                 g.backward(retain_graph=True)
                 loss_mean = torch.norm(torch.mean(info_fake.view(self.batch_size,-1), dim=0) - torch.mean(info_real.view(self.batch_size,-1), dim=0), 1)
                 loss_std = torch.norm(torch.std(info_fake.view(self.batch_size,-1), dim=0) - torch.std(info_real.view(self.batch_size,-1), dim=0), 1)
                 loss_info = loss_mean + loss_std 
+                epoch_totals['information'] += loss_info.detach()
                 loss_info.backward()
                 optimizerG.step()
+                generator_updates += 1
 
 
                 if problem_type:
@@ -541,6 +629,8 @@ class CTABGANSynthesizer:
 
                     loss_cc = c_loss(real_pre, real_label)
                     loss_cg = c_loss(fake_pre, fake_label)
+                    epoch_totals['classifier_real'] += loss_cc.detach()
+                    epoch_totals['classifier_fake'] += loss_cg.detach()
 
                     optimizerG.zero_grad()
                     loss_cg.backward()
@@ -549,15 +639,95 @@ class CTABGANSynthesizer:
                     optimizerC.zero_grad()
                     loss_cc.backward()
                     optimizerC.step()
+                    classifier_updates += 1
                                 
             epoch += 1
-            if epoch % self.snapshot_frq == 0:
+            if epoch in self._snapshot_epoch_set:
                 snapshot = {
                     "epoch": epoch,
-                    "state_dict": copy.deepcopy(discriminator.state_dict())
+                    "state_dict": {
+                        key: value.detach().cpu().clone()
+                        for key, value in discriminator.state_dict().items()
+                    },
+                    # Keep the generator from the same epoch as the
+                    # discriminator.  A discriminator-only trajectory tested
+                    # against the final generator measures critic drift, not
+                    # GAN convergence.  CPU clones avoid retaining GPU memory
+                    # for the remainder of a long training run.
+                    "generator_state_dict": {
+                        key: value.detach().cpu().clone()
+                        for key, value in self.generator.state_dict().items()
+                    },
                 }
             
                 discriminator_snap.append(snapshot)
+
+            completed = i + 1
+            modules = [('generator', self.generator), ('discriminator', discriminator)]
+            if classifier is not None:
+                modules.append(('classifier', classifier))
+            for module_name, module in modules:
+                if any(not torch.isfinite(parameter).all() for parameter in module.parameters()):
+                    raise FloatingPointError(
+                        f"Non-finite {module_name} parameters after epoch {completed}"
+                    )
+            history_row = {
+                'epoch': completed,
+                'elapsed_seconds': time.monotonic() - progress_started,
+                'discriminator_real': epoch_mean(
+                    'discriminator_real', epoch_totals['discriminator_real'], discriminator_updates, completed
+                ),
+                'discriminator_fake': epoch_mean(
+                    'discriminator_fake', epoch_totals['discriminator_fake'], discriminator_updates, completed
+                ),
+                'gradient_penalty': epoch_mean(
+                    'gradient_penalty', epoch_totals['gradient_penalty'], discriminator_updates, completed
+                ),
+                'generator': epoch_mean(
+                    'generator', epoch_totals['generator'], generator_updates, completed
+                ),
+                'conditional': epoch_mean(
+                    'conditional', epoch_totals['conditional'], generator_updates, completed
+                ),
+                'information': epoch_mean(
+                    'information', epoch_totals['information'], generator_updates, completed
+                ),
+                'classifier_real': (
+                    epoch_mean(
+                        'classifier_real', epoch_totals['classifier_real'], classifier_updates, completed
+                    )
+                    if classifier_updates else np.nan
+                ),
+                'classifier_fake': (
+                    epoch_mean(
+                        'classifier_fake', epoch_totals['classifier_fake'], classifier_updates, completed
+                    )
+                    if classifier_updates else np.nan
+                ),
+            }
+            self.training_history.append(history_row)
+            if interactive_progress:
+                epoch_iterator.set_postfix(
+                    D=f"{history_row['discriminator_real'] + history_row['discriminator_fake']:.3f}",
+                    G=f"{history_row['generator'] + history_row['information']:.3f}",
+                    GP=f"{history_row['gradient_penalty']:.3f}",
+                )
+            if (
+                self.progress != 'off'
+                and not interactive_progress
+                and (completed % report_interval == 0 or completed == self.epochs)
+            ):
+                elapsed = time.monotonic() - progress_started
+                eta = elapsed / completed * (self.epochs - completed)
+                print(
+                    f"{self.progress_label}: {completed}/{self.epochs} epochs "
+                    f"({completed / self.epochs:.0%}), elapsed={elapsed:.0f}s, eta={eta:.0f}s, "
+                    f"D={history_row['discriminator_real'] + history_row['discriminator_fake']:.3f}, "
+                    f"G={history_row['generator'] + history_row['information']:.3f}, "
+                    f"GP={history_row['gradient_penalty']:.3f}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
         return discriminator_snap
                 

@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 import torch
+import warnings
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.mixture import BayesianGaussianMixture
 
 class DataTransformer():
     
-    def __init__(self, train_data=pd.DataFrame, categorical_list=[], mixed_dict={}, general_list=[], non_categorical_list=[], n_clusters=10, eps=0.005):
+    def __init__(self, train_data=pd.DataFrame, categorical_list=[], mixed_dict={}, general_list=[], non_categorical_list=[], n_clusters=10, eps=0.005, mixture_max_iter=500, mixture_n_init=3, mixture_tol=1e-3):
         self.meta = None
         self.n_clusters = n_clusters
         self.eps = eps
@@ -14,6 +16,93 @@ class DataTransformer():
         self.mixed_columns= mixed_dict
         self.general_columns = general_list
         self.non_categorical_columns= non_categorical_list
+        self.mixture_max_iter = int(mixture_max_iter)
+        self.mixture_n_init = int(mixture_n_init)
+        self.mixture_tol = float(mixture_tol)
+        if self.mixture_max_iter < 1 or self.mixture_n_init < 1 or self.mixture_tol <= 0:
+            raise ValueError("Mixture max_iter/n_init must be positive and tol must exceed zero")
+        self.mixture_diagnostics = []
+
+    def _fit_mixture(self, values, column_index, role):
+        values = np.asarray(values).reshape([-1, 1])
+        if not len(values) or not np.isfinite(values.astype(float)).all():
+            raise ValueError(f'Empty or non-finite mixture input for column {column_index} ({role})')
+        attempts = [
+            (self.mixture_max_iter, self.mixture_n_init),
+            (max(1000, self.mixture_max_iter * 2), max(5, self.mixture_n_init)),
+        ]
+        attempt_records = []
+        fitted = None
+        for attempt, (max_iter, n_init) in enumerate(attempts, start=1):
+            fitted = BayesianGaussianMixture(
+                n_components=self.n_clusters,
+                weight_concentration_prior_type='dirichlet_process',
+                weight_concentration_prior=0.001,
+                max_iter=max_iter,
+                n_init=n_init,
+                tol=self.mixture_tol,
+                random_state=42,
+            )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter('always', ConvergenceWarning)
+                fitted.fit(values)
+            attempt_records.append({
+                'attempt': attempt,
+                'max_iter': max_iter,
+                'n_init': n_init,
+                'converged': bool(fitted.converged_),
+                'iterations': int(fitted.n_iter_),
+                'lower_bound': float(fitted.lower_bound_),
+                'convergence_warnings': len([
+                    warning for warning in caught
+                    if issubclass(warning.category, ConvergenceWarning)
+                ]),
+            })
+            if fitted.converged_:
+                break
+        self.mixture_diagnostics.append({
+            'column_index': int(column_index),
+            'role': role,
+            'rows': int(len(values)),
+            'unique_values': int(np.unique(values).size),
+            'attempts': attempt_records,
+            'converged': bool(fitted is not None and fitted.converged_),
+        })
+        diagnostic = self.mixture_diagnostics[-1]
+        diagnostic['usable'] = False
+        # A stopping-tolerance failure alone does not invalidate a mixture.
+        # Validate even converged fits, and check responsibilities in chunks.
+        try:
+            for name in ('means_', 'covariances_', 'weights_', 'precisions_cholesky_'):
+                if not np.isfinite(getattr(fitted, name)).all():
+                    raise ValueError(f'non-finite {name}')
+            if not np.isfinite(fitted.lower_bound_):
+                raise ValueError('non-finite lower bound')
+            if np.any(fitted.covariances_ <= 0):
+                raise ValueError('non-positive variances')
+            if np.any(fitted.weights_ < 0) or not np.isclose(fitted.weights_.sum(), 1):
+                raise ValueError('invalid component weights')
+            for start in range(0, len(values), 8192):
+                probs = fitted.predict_proba(values[start:start + 8192])
+                if (probs.shape != (len(values[start:start + 8192]), self.n_clusters)
+                        or not np.isfinite(probs).all() or np.any(probs < 0)
+                        or np.any(probs > 1) or not np.allclose(probs.sum(axis=1), 1)):
+                    raise ValueError('invalid component probabilities')
+            diagnostic['usable'] = True
+        except (ValueError, AttributeError, FloatingPointError) as exc:
+            diagnostic['validation_error'] = str(exc)
+            raise RuntimeError(
+                f'Unusable BayesianGaussianMixture for column {column_index} ({role}): {exc}'
+            ) from exc
+        diagnostic['accepted_nonconverged'] = not bool(fitted.converged_)
+        if not fitted.converged_:
+            warnings.warn(
+                f'BayesianGaussianMixture did not converge for column {column_index} '
+                f'({role}) after bounded retries; using numerically validated fit. '
+                'This is not a convergence guarantee; inspect mixture diagnostics.',
+                ConvergenceWarning, stacklevel=2,
+            )
+        return fitted
         
     def get_metadata(self):
         
@@ -65,15 +154,11 @@ class DataTransformer():
         self.output_dim = 0
         self.components = []
         self.filter_arr = []
+        self.mixture_diagnostics = []
         for id_, info in enumerate(self.meta):
             if info['type'] == "continuous":
                 if id_ not in self.general_columns:
-                  gm = BayesianGaussianMixture(
-                      n_components = self.n_clusters, 
-                      weight_concentration_prior_type='dirichlet_process',
-                      weight_concentration_prior=0.001, 
-                      max_iter=100,n_init=1, random_state=42)
-                  gm.fit(data[:, id_].reshape([-1, 1]))
+                  gm = self._fit_mixture(data[:, id_], id_, 'continuous')
                   mode_freq = (pd.Series(gm.predict(data[:, id_].reshape([-1, 1]))).value_counts().keys())
                   model.append(gm)
                   old_comp = gm.weights_ > self.eps
@@ -83,6 +168,8 @@ class DataTransformer():
                           comp.append(True)
                       else:
                           comp.append(False)
+                  if not any(comp):
+                      raise RuntimeError(f'No usable mixture components for column {id_}')
                   self.components.append(comp) 
                   self.output_info += [(1, 'tanh','no_g'), (np.sum(comp), 'softmax')]
                   self.output_dim += 1 + np.sum(comp)
@@ -94,18 +181,7 @@ class DataTransformer():
             
             elif info['type'] == "mixed":
                 
-                gm1 = BayesianGaussianMixture(
-                    n_components = self.n_clusters, 
-                    weight_concentration_prior_type='dirichlet_process',
-                    weight_concentration_prior=0.001, max_iter=100,
-                    n_init=1,random_state=42)
-                gm2 = BayesianGaussianMixture(
-                    n_components = self.n_clusters,
-                    weight_concentration_prior_type='dirichlet_process',
-                    weight_concentration_prior=0.001, max_iter=100,
-                    n_init=1,random_state=42)
-                
-                gm1.fit(data[:, id_].reshape([-1, 1]))
+                gm1 = self._fit_mixture(data[:, id_], id_, 'mixed_all')
                 
                 filter_arr = []
                 for element in data[:, id_]:
@@ -114,7 +190,7 @@ class DataTransformer():
                     else:
                         filter_arr.append(False)
                
-                gm2.fit(data[:, id_][filter_arr].reshape([-1, 1]))
+                gm2 = self._fit_mixture(data[:, id_][filter_arr], id_, 'mixed_non_modal')
                 mode_freq = (pd.Series(gm2.predict(data[:, id_][filter_arr].reshape([-1, 1]))).value_counts().keys())
                 self.filter_arr.append(filter_arr)
                 model.append((gm1,gm2))
@@ -129,6 +205,8 @@ class DataTransformer():
                     else:
                         comp.append(False)
 
+                if not any(comp):
+                    raise RuntimeError(f'No usable non-modal mixture components for column {id_}')
                 self.components.append(comp)
 
                 self.output_info += [(1, 'tanh',"no_g"), (np.sum(comp) + len(info['modal']), 'softmax')]

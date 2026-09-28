@@ -1,0 +1,226 @@
+{
+  "dataset_name": "wids",
+  "generator_name": "ctabgan_plus",
+  "data_path": "Real_Datasets/WiDS_cleaned.csv",
+  "results_dir": "results",
+  "target_col": "hospital_death",
+  "categorical_cols": [
+    "elective_surgery",
+    "ethnicity",
+    "gender",
+    "icu_admit_source",
+    "icu_stay_type",
+    "icu_type",
+    "readmission_status",
+    "apache_post_operative",
+    "arf_apache",
+    "gcs_unable_apache",
+    "intubated_apache",
+    "ventilated_apache",
+    "aids",
+    "cirrhosis",
+    "diabetes_mellitus",
+    "hepatic_failure",
+    "immunosuppression",
+    "leukemia",
+    "lymphoma",
+    "solid_tumor_with_metastasis",
+    "apache_2_diagnosis",
+    "apache_3j_diagnosis",
+    "apache_3j_bodysystem",
+    "apache_2_bodysystem",
+    "hospital_death"
+  ],
+  "continuous_cols": [
+    "height",
+    "pre_icu_los_days",
+    "heart_rate_apache",
+    "map_apache",
+    "resprate_apache",
+    "d1_diasbp_max",
+    "d1_diasbp_min",
+    "d1_diasbp_noninvasive_max",
+    "d1_diasbp_noninvasive_min",
+    "d1_heartrate_max",
+    "d1_heartrate_min",
+    "d1_mbp_max",
+    "d1_mbp_min",
+    "d1_mbp_noninvasive_max",
+    "d1_mbp_noninvasive_min",
+    "d1_resprate_max",
+    "d1_resprate_min",
+    "d1_spo2_max",
+    "d1_spo2_min",
+    "d1_sysbp_max",
+    "d1_sysbp_min",
+    "d1_sysbp_noninvasive_max",
+    "d1_sysbp_noninvasive_min"
+  ],
+  "seed": 42,
+  "frozen": false,
+  "deterministic": true,
+  "allow_tf32": false,
+  "n_jobs": -1,
+  "split": {
+    "train_fraction": 0.6,
+    "audit_fraction": 0.2,
+    "val_fraction": 0.1,
+    "test_fraction": 0.1
+  },
+  "rare_categories": {
+    "enabled": true,
+    "min_count": 6,
+    "pooled_label": "__OTHER_RARE__",
+    "sensitivity_thresholds": [3, 6, 10, 20],
+    "exclude_features": []
+  },
+  "weighting": {
+    "alpha": 3.0,
+    "gamma": 0.6,
+    "top_k": 5,
+    "w_max": 3.0,
+    "correlation_aware_selection": false,
+    "correlation_threshold": 0.65,
+    "exclude_features": []
+  },
+  "detector": {
+    "n_estimators": 300,
+    "shap_max_rows": 100,
+    "shap_scope": "correct_synthetic_holdout_only",
+    "test_size": 0.3
+  },
+  "discriminator_shap": {
+    "enabled": true,
+    "background_size": 50,
+    "explain_size": 100,
+    "condition_samples": 8,
+    "bootstrap_repeats": 200,
+    "late_window_snapshots": 3,
+    "exclude_target": false
+  },
+  "baseline_diagnostics": {
+    "enabled": true,
+    "top_n": 10,
+    "n_estimators": 300
+  },
+  "priority_diagnostics": {
+    "enabled": true,
+    "n_estimators": 50
+  },
+  "feature_exclusion_sensitivity": {
+    "enabled": true,
+    "n_estimators": 50
+  },
+  "evaluation": {
+    "n_estimators": 300,
+    "privacy_max_reference_rows": 20000,
+    "privacy_max_query_rows": 10000
+  },
+  "utility_tasks": [
+    {
+      "name": "mortality",
+      "balance": "imbalanced",
+      "balance_strategy": "match_real_train",
+      "task_type": "classification",
+      "target_col": "hospital_death",
+      "positive_label": "1"
+    },
+    {
+      "name": "mortality_balanced",
+      "balance": "balanced",
+      "balance_strategy": "fixed_50_50",
+      "task_type": "classification",
+      "target_col": "hospital_death",
+      "positive_label": "1"
+    }
+  ],
+  "mixed_utility": {
+    "enabled": true,
+    "additive_fractions": [0.0, 0.25, 0.5, 1.0],
+    "replacement_fractions": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "repeats": 3,
+    "n_estimators": 100
+  },
+  "generator": {
+    "categorical_columns": [
+      "elective_surgery",
+      "ethnicity",
+      "gender",
+      "icu_admit_source",
+      "icu_stay_type",
+      "icu_type",
+      "readmission_status",
+      "apache_post_operative",
+      "arf_apache",
+      "gcs_unable_apache",
+      "intubated_apache",
+      "ventilated_apache",
+      "aids",
+      "cirrhosis",
+      "diabetes_mellitus",
+      "hepatic_failure",
+      "immunosuppression",
+      "leukemia",
+      "lymphoma",
+      "solid_tumor_with_metastasis",
+      "apache_2_diagnosis",
+      "apache_3j_diagnosis",
+      "apache_3j_bodysystem",
+      "apache_2_bodysystem",
+      "hospital_death"
+    ],
+    "log_columns": [],
+    "mixed_columns": {
+      "d1_spo2_max": [100.0]
+    },
+    "general_columns": [
+      "height",
+      "pre_icu_los_days",
+      "heart_rate_apache",
+      "map_apache",
+      "resprate_apache",
+      "d1_diasbp_max",
+      "d1_diasbp_min",
+      "d1_diasbp_noninvasive_max",
+      "d1_diasbp_noninvasive_min",
+      "d1_heartrate_max",
+      "d1_heartrate_min",
+      "d1_mbp_max",
+      "d1_mbp_min",
+      "d1_mbp_noninvasive_max",
+      "d1_mbp_noninvasive_min",
+      "d1_resprate_max",
+      "d1_resprate_min",
+      "d1_spo2_max",
+      "d1_spo2_min",
+      "d1_sysbp_max",
+      "d1_sysbp_min",
+      "d1_sysbp_noninvasive_max",
+      "d1_sysbp_noninvasive_min"
+    ],
+    "non_categorical_columns": [],
+    "integer_columns": [],
+    "problem_type": {
+      "Classification": "hospital_death"
+    },
+    "class_dim": [256, 256, 256],
+    "random_dim": 128,
+    "num_channels": 96,
+    "l2scale": 0.00001,
+    "batch_size": 1024,
+    "epochs": 200,
+    "mixture_max_iter": 500,
+    "mixture_n_init": 3,
+    "mixture_tol": 0.001,
+    "dequantize_integer_features": true,
+    "dequantization_half_width": 0.5,
+    "snapshot_frq": null,
+    "snapshot_schedule": {
+      "count": 12,
+      "power": 2.0
+    }
+  },
+  "smoke_rows": 5000,
+  "smoke_epochs": 2,
+  "smoke_batch_size": 512
+}

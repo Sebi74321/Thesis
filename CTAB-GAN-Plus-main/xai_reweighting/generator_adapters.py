@@ -1,6 +1,873 @@
-class GeneratorAdapter:
-    def fit(self, df):
-        raise NotImplementedError
+"""Adapters exposing a common dataframe-in/dataframe-out generator API."""
 
-    def sample(self, n):
-        raise NotImplementedError
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from contextlib import contextmanager, redirect_stdout
+import copy
+import os
+from pathlib import Path
+import sys
+from typing import Any, Dict, Mapping, Optional
+import warnings
+
+import numpy as np
+import pandas as pd
+import torch
+from pandas.api.types import is_bool_dtype, is_float_dtype, is_numeric_dtype
+from sklearn.exceptions import ConvergenceWarning
+
+from model.pipeline.data_preparation import DataPrep
+from model.synthesizer.ctabgan_synthesizer import CTABGANSynthesizer
+
+from .device import seed_everything
+
+# Explicit unit-aware rule: this duration is stored in days on a minute grid.
+# Decimal-place inference cannot represent rational increments such as 1/1440.
+_MINUTE_DURATION_COLUMNS = {"pre_icu_los_days"}
+_DAY_SERIALIZATION_TOLERANCE = 0.001 / 86400.0
+
+
+class GeneratorAdapter(ABC):
+    @abstractmethod
+    def fit(self, df: pd.DataFrame) -> None:
+        """Fit the generator on every row in ``df``."""
+
+    @abstractmethod
+    def sample(self, n: int) -> pd.DataFrame:
+        """Return exactly ``n`` synthetic rows."""
+
+
+def _restore_schema(result: pd.DataFrame, columns, dtypes) -> pd.DataFrame:
+    """Restore the fitted dataframe's order and practical pandas dtypes."""
+    missing = [column for column in columns if column not in result]
+    if missing:
+        raise RuntimeError(f"Generator output is missing columns: {missing}")
+    result = result.loc[:, columns].copy().reset_index(drop=True)
+    for column, dtype in dtypes.items():
+        if is_bool_dtype(dtype):
+            normalized = result[column].astype(str).str.lower()
+            if not normalized.isin({"true", "false", "0", "1"}).all():
+                raise RuntimeError(f"Cannot restore boolean dtype for generated column '{column}'")
+            result[column] = normalized.map(
+                {"true": True, "false": False, "1": True, "0": False}
+            ).astype(dtype)
+        elif is_numeric_dtype(dtype):
+            result[column] = pd.to_numeric(result[column], errors="raise")
+            if not is_float_dtype(dtype):
+                result[column] = result[column].round()
+            result[column] = result[column].astype(dtype)
+        else:
+            result[column] = result[column].astype(dtype)
+    return result
+
+
+def _decimal_places(series: pd.Series, coverage: float = 0.99, max_places: int = 6) -> int:
+    """Infer measurement precision without forcing genuinely continuous columns onto a grid."""
+    if not is_float_dtype(series.dtype):
+        return 0
+    numeric = pd.to_numeric(series, errors="coerce").dropna().to_numpy(dtype=float)
+    if len(numeric):
+        for places in range(max_places + 1):
+            rounded = np.round(numeric, places)
+            tolerance = max(1e-10, 10.0 ** (-(places + 7)))
+            if float(np.mean(np.abs(numeric - rounded) <= tolerance)) >= coverage:
+                return places
+    maximum = 0
+    for value in series.dropna().astype(str):
+        mantissa = value.lower().split("e", 1)[0]
+        if "." in mantissa:
+            maximum = max(maximum, len(mantissa.rsplit(".", 1)[1].rstrip("0")))
+    return min(maximum, 12)
+
+
+def _infer_numeric_constraints(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Learn numeric measurement precision and finite support from fitted rows."""
+    constraints: Dict[str, Dict[str, Any]] = {}
+    for column in frame.columns:
+        dtype = frame[column].dtype
+        if is_bool_dtype(dtype) or not is_numeric_dtype(dtype):
+            continue
+        numeric = pd.to_numeric(frame[column], errors="coerce")
+        finite = numeric[np.isfinite(numeric)]
+        decimals = _decimal_places(frame[column])
+        constraints[column] = {
+            "decimals": int(decimals),
+            "integer_valued": bool(decimals == 0),
+            "minimum": float(finite.min()) if len(finite) else None,
+            "maximum": float(finite.max()) if len(finite) else None,
+            "source_dtype": str(dtype),
+        }
+        if column in _MINUTE_DURATION_COLUMNS:
+            constraints[column].update(rounding_scale=1440.0, rounding_grid_unit="minute")
+            # Preserve the CSV's decimal representation after rounding in units.
+            # WiDS stores minute fractions at nine decimal places, not as the
+            # full floating-point representation of minute / 1440.
+            serialization_decimals = next(
+                (places for places in range(9, 13)
+                 if len(finite) and np.array_equal(finite.to_numpy(), finite.round(places).to_numpy())),
+                None,
+            )
+            constraints[column]['grid_serialization_decimals'] = serialization_decimals
+            # CSV serialization may put a fitted endpoint a fraction of a
+            # millisecond off the minute grid. Recognize that endpoint without
+            # relaxing support guards for genuinely off-grid bounds.
+            for bound in ("minimum", "maximum"):
+                value = constraints[column][bound]
+                if value is not None:
+                    snapped = float(np.rint(value * 1440.0) / 1440.0)
+                    if serialization_decimals is not None:
+                        snapped = float(np.round(snapped, serialization_decimals))
+                    constraints[column][f"grid_{bound}"] = (
+                        snapped if abs(snapped - value) <= _DAY_SERIALIZATION_TOLERANCE else value
+                    )
+    return constraints
+
+
+def _apply_numeric_constraints(
+    result: pd.DataFrame,
+    constraints: Mapping[str, Mapping[str, Any]],
+) -> tuple[pd.DataFrame, Dict[str, Dict[str, int]]]:
+    """Round measurements without hiding generator support violations."""
+    result = result.copy()
+    diagnostics: Dict[str, Dict[str, int]] = {}
+    for column, constraint in constraints.items():
+        if column not in result:
+            continue
+        values = pd.to_numeric(result[column], errors="raise")
+        non_missing = values.notna()
+        if not np.isfinite(values[non_missing].to_numpy(dtype=float)).all():
+            raise RuntimeError(f"Generator produced non-finite values for numeric column '{column}'")
+
+        scale = constraint.get("rounding_scale")
+        if scale is None:
+            rounded = values.round(int(constraint["decimals"]))
+        else:
+            scale = float(scale)
+            if not np.isfinite(scale) or scale <= 0:
+                raise ValueError(f"Invalid rounding scale for {column!r}")
+            rounded = (values * scale).round() / scale
+            serialization_decimals = constraint.get('grid_serialization_decimals')
+            if serialization_decimals is not None:
+                rounded = rounded.round(int(serialization_decimals))
+        minimum = constraint.get("minimum")
+        maximum = constraint.get("maximum")
+        guard_minimum = constraint.get("grid_minimum", minimum) if scale is not None else minimum
+        guard_maximum = constraint.get("grid_maximum", maximum) if scale is not None else maximum
+        guarded = pd.Series(False, index=values.index)
+        if guard_minimum is not None:
+            guarded |= (rounded < guard_minimum) & (rounded < values)
+        if guard_maximum is not None:
+            guarded |= (rounded > guard_maximum) & (rounded > values)
+        rounded.loc[guarded] = values.loc[guarded]
+
+        changed = non_missing & ~np.isclose(
+            values.fillna(0.0).to_numpy(dtype=float),
+            rounded.fillna(0.0).to_numpy(dtype=float),
+            rtol=0.0,
+            atol=1e-12,
+        )
+        below = values < minimum if minimum is not None else pd.Series(False, index=values.index)
+        above = values > maximum if maximum is not None else pd.Series(False, index=values.index)
+        diagnostics[column] = {
+            "rounded_rows": int(np.sum(changed)),
+            "rounding_guarded_rows": int(guarded.sum()),
+            "generated_below_min_rows": int(below.sum()),
+            "generated_above_max_rows": int(above.sum()),
+        }
+        result[column] = rounded
+    return result, diagnostics
+
+
+def _dequantize_integer_features(
+    frame: pd.DataFrame,
+    constraints: Mapping[str, Mapping[str, Any]],
+    *,
+    categorical_columns,
+    mixed_columns: Mapping[str, Any],
+    seed: int,
+    half_width: float = 0.5,
+) -> tuple[pd.DataFrame, Dict[str, Any]]:
+    """Add bounded training-only noise to continuous integer-grid features.
+
+    A continuous GAN can otherwise distinguish real integer measurements from
+    fractional generator outputs without learning their clinical distribution.
+    Configured modal values (for example SpO2=100) remain exact, and boundary
+    observations receive one-sided noise so dequantization itself does not
+    extend the observed support.
+    """
+    half_width = float(half_width)
+    if not np.isfinite(half_width) or not 0.0 < half_width <= 0.5:
+        raise ValueError("dequantization_half_width must be in (0, 0.5]")
+    result = frame.copy(deep=True)
+    categorical = {str(column) for column in categorical_columns}
+    rng = np.random.default_rng(int(seed))
+    column_diagnostics: Dict[str, Dict[str, Any]] = {}
+
+    for column, constraint in constraints.items():
+        if (
+            column not in result
+            or str(column) in categorical
+            or not bool(constraint.get("integer_valued", False))
+        ):
+            continue
+        values = pd.to_numeric(result[column], errors="coerce")
+        finite = values.notna() & np.isfinite(values.to_numpy(dtype=float))
+        minimum = constraint.get("minimum")
+        maximum = constraint.get("maximum")
+        if not finite.any() or minimum is None or maximum is None:
+            continue
+
+        numeric = values.to_numpy(dtype=float, copy=True)
+        finite_mask = finite.to_numpy(copy=True)
+        grid_aligned = finite_mask & np.isclose(
+            numeric, np.round(numeric), rtol=0.0, atol=1e-12
+        )
+        eligible = grid_aligned.copy()
+        modal = np.zeros(len(result), dtype=bool)
+        for modal_value in mixed_columns.get(column, []):
+            try:
+                modal |= eligible & np.isclose(
+                    numeric, float(modal_value), rtol=0.0, atol=1e-12
+                )
+            except (TypeError, ValueError):
+                continue
+        eligible &= ~modal
+        lower = eligible & np.isclose(
+            numeric, float(minimum), rtol=0.0, atol=1e-12
+        )
+        upper = eligible & np.isclose(
+            numeric, float(maximum), rtol=0.0, atol=1e-12
+        )
+        constant = lower & upper
+        eligible &= ~constant
+        lower &= ~constant
+        upper &= ~constant
+        interior = eligible & ~lower & ~upper
+
+        noise = np.zeros(len(result), dtype=float)
+        noise[interior] = rng.uniform(
+            -half_width, half_width, size=int(interior.sum())
+        )
+        noise[lower] = rng.uniform(0.0, half_width, size=int(lower.sum()))
+        noise[upper] = rng.uniform(-half_width, 0.0, size=int(upper.sum()))
+        numeric[eligible] += noise[eligible]
+        result[column] = numeric
+        column_diagnostics[str(column)] = {
+            "rows": int(len(result)),
+            "finite_rows": int(finite.sum()),
+            "grid_aligned_rows": int(grid_aligned.sum()),
+            "non_grid_rows_preserved": int((finite_mask & ~grid_aligned).sum()),
+            "dequantized_rows": int(eligible.sum()),
+            "lower_boundary_rows": int(lower.sum()),
+            "upper_boundary_rows": int(upper.sum()),
+            "interior_rows": int(interior.sum()),
+            "preserved_modal_rows": int(modal.sum()),
+            "preserved_constant_rows": int(constant.sum()),
+            "minimum": float(minimum),
+            "maximum": float(maximum),
+            "dequantized_minimum": float(np.nanmin(numeric[finite.to_numpy()])),
+            "dequantized_maximum": float(np.nanmax(numeric[finite.to_numpy()])),
+        }
+
+    return result, {
+        "enabled": True,
+        "method": "bounded_uniform_training_only",
+        "seed": int(seed),
+        "half_width": half_width,
+        "categorical_columns_excluded": sorted(categorical),
+        "columns": column_diagnostics,
+    }
+
+
+@contextmanager
+def _working_directory(path: Path):
+    previous = Path.cwd()
+    path.mkdir(parents=True, exist_ok=True)
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+class _Tee:
+    def __init__(self, stream):
+        self.stream = stream
+        self.parts = []
+
+    def write(self, value):
+        self.parts.append(value)
+        return self.stream.write(value)
+
+    def flush(self):
+        self.stream.flush()
+
+    @property
+    def text(self):
+        return "".join(self.parts)
+
+
+class CTABGANPlusAdapter(GeneratorAdapter):
+    """CTAB-GAN+ adapter that bypasses its legacy internal train/test split."""
+
+    def __init__(
+        self,
+        *,
+        categorical_columns,
+        log_columns=None,
+        mixed_columns=None,
+        general_columns=None,
+        non_categorical_columns=None,
+        integer_columns=None,
+        problem_type=None,
+        class_dim=(256, 256),
+        random_dim=100,
+        num_channels=64,
+        l2scale=1e-5,
+        batch_size=512,
+        epochs=150,
+        snapshot_frq: Optional[int] = None,
+        snapshot_schedule: Optional[Dict[str, Any]] = None,
+        device: torch.device | str = "cpu",
+        seed: int = 42,
+        deterministic: bool = True,
+        allow_tf32: bool = False,
+        progress: str = "auto",
+        progress_label: str = "CTAB-GAN+",
+        mixture_max_iter: int = 500,
+        mixture_n_init: int = 3,
+        mixture_tol: float = 1e-3,
+        dequantize_integer_features: bool = False,
+        dequantization_half_width: float = 0.5,
+    ):
+        self.categorical_columns = list(categorical_columns)
+        self.log_columns = list(log_columns or [])
+        self.mixed_columns = dict(mixed_columns or {})
+        self.general_columns = list(general_columns or [])
+        self.non_categorical_columns = list(non_categorical_columns or [])
+        self.integer_columns = list(integer_columns or [])
+        if not isinstance(dequantize_integer_features, bool):
+            raise ValueError("dequantize_integer_features must be true or false")
+        self.dequantize_integer_features = dequantize_integer_features
+        self.dequantization_half_width = float(dequantization_half_width)
+        if (
+            not np.isfinite(self.dequantization_half_width)
+            or not 0.0 < self.dequantization_half_width <= 0.5
+        ):
+            raise ValueError("dequantization_half_width must be in (0, 0.5]")
+        self.problem_type: Dict[str, Any] = dict(problem_type or {None: None})
+        self.synthesizer_kwargs = {
+            "class_dim": tuple(class_dim),
+            "random_dim": random_dim,
+            "num_channels": num_channels,
+            "l2scale": l2scale,
+            "batch_size": batch_size,
+            "epochs": epochs,
+            "snapshot_frq": snapshot_frq,
+            "snapshot_schedule": copy.deepcopy(snapshot_schedule),
+            "device": str(device),
+            "progress": progress,
+            "progress_label": progress_label,
+            "mixture_max_iter": mixture_max_iter,
+            "mixture_n_init": mixture_n_init,
+            "mixture_tol": mixture_tol,
+        }
+        self.device = torch.device(device)
+        self.seed = int(seed)
+        self.deterministic = bool(deterministic)
+        self.allow_tf32 = bool(allow_tf32)
+        self.columns = None
+        self.dtypes = None
+        self.decimals = {}
+        self.numeric_constraints = {}
+        self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
+        self.dequantization_diagnostics: Dict[str, Any] = {
+            "enabled": False,
+            "columns": {},
+        }
+        self.data_prep = None
+        self.synthesizer = None
+        self.discriminator_snapshots = []
+        self.training_history = pd.DataFrame()
+        self.mixture_diagnostics = []
+        self._sample_calls = 0
+
+    def fit(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise ValueError("Cannot fit CTAB-GAN+ on an empty dataframe")
+        seed_everything(self.seed, self.deterministic, self.allow_tf32)
+        train_df = df.copy(deep=True).reset_index(drop=True)
+        self.columns = train_df.columns.tolist()
+        self.dtypes = train_df.dtypes.to_dict()
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
+        model_train_df = train_df
+        if self.dequantize_integer_features:
+            model_train_df, self.dequantization_diagnostics = (
+                _dequantize_integer_features(
+                    train_df,
+                    self.numeric_constraints,
+                    categorical_columns=self.categorical_columns,
+                    mixed_columns=self.mixed_columns,
+                    seed=self.seed,
+                    half_width=self.dequantization_half_width,
+                )
+            )
+        else:
+            self.dequantization_diagnostics = {
+                "enabled": False,
+                "method": None,
+                "seed": self.seed,
+                "half_width": self.dequantization_half_width,
+                "columns": {},
+            }
+
+        # Passing a null problem type prevents DataPrep from performing its
+        # legacy split. The real problem type is still supplied to the
+        # synthesizer below, preserving conditional classification training.
+        self.data_prep = DataPrep(
+            model_train_df,
+            self.categorical_columns,
+            self.log_columns,
+            self.mixed_columns.copy(),
+            self.general_columns,
+            self.non_categorical_columns,
+            self.integer_columns,
+            {None: None},
+            0.0,
+        )
+        if len(self.data_prep.df) != len(train_df):
+            raise RuntimeError("Adapter preprocessing unexpectedly discarded training rows")
+
+        self.synthesizer = CTABGANSynthesizer(**self.synthesizer_kwargs)
+        self._sample_calls = 0
+        try:
+            self.discriminator_snapshots = self.synthesizer.fit(
+                train_data=self.data_prep.df,
+                categorical=self.data_prep.column_types["categorical"],
+                mixed=self.data_prep.column_types["mixed"],
+                general=self.data_prep.column_types["general"],
+                non_categorical=self.data_prep.column_types["non_categorical"],
+                type=self.problem_type,
+            )
+        finally:
+            self.training_history = pd.DataFrame(self.synthesizer.training_history)
+            self.mixture_diagnostics = list(self.synthesizer.mixture_diagnostics)
+
+    def prepare_discriminator_probe(
+        self, frame: pd.DataFrame, *, seed: int
+    ) -> pd.DataFrame:
+        """Represent audit rows like real rows supplied during GAN training."""
+        if not self.dequantize_integer_features:
+            return frame.copy(deep=True)
+        prepared, _ = _dequantize_integer_features(
+            frame,
+            self.numeric_constraints,
+            categorical_columns=self.categorical_columns,
+            mixed_columns=self.mixed_columns,
+            seed=int(seed),
+            half_width=self.dequantization_half_width,
+        )
+        return prepared
+
+    def sample(self, n: int) -> pd.DataFrame:
+        if self.synthesizer is None or self.data_prep is None or self.columns is None:
+            raise RuntimeError("fit() must be called before sample()")
+        if n < 0:
+            raise ValueError("n must be non-negative")
+        if n == 0:
+            return pd.DataFrame(columns=self.columns)
+        seed_everything(self.seed + self._sample_calls, self.deterministic, self.allow_tf32)
+        self._sample_calls += 1
+        encoded = self.synthesizer.sample(n)
+        result = self.data_prep.inverse_prep(encoded).loc[:, self.columns].reset_index(drop=True)
+        self.last_raw_sample = result.copy(deep=True)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
+        result = _restore_schema(result, self.columns, self.dtypes)
+        if len(result) != n:
+            raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
+        return result
+
+    def save_checkpoint(self, path: Path) -> None:
+        if self.synthesizer is None or not hasattr(self.synthesizer, "generator"):
+            raise RuntimeError("fit() must be called before save_checkpoint()")
+        torch.save(
+            {
+                "backend": "ctabgan_plus",
+                "generator_state_dict": self.synthesizer.generator.state_dict(),
+                "synthesizer_kwargs": self.synthesizer_kwargs,
+                "columns": self.columns,
+                "dtypes": {key: str(value) for key, value in self.dtypes.items()},
+                "measurement_decimals": self.decimals,
+                "numeric_constraints": self.numeric_constraints,
+                "dequantize_integer_features": self.dequantize_integer_features,
+                "dequantization_half_width": self.dequantization_half_width,
+                "dequantization_diagnostics": self.dequantization_diagnostics,
+            },
+            path,
+        )
+
+
+class CTGANAdapter(GeneratorAdapter):
+    """Adapter for the standalone ``ctgan`` package."""
+
+    def __init__(
+        self,
+        *,
+        categorical_columns,
+        embedding_dim=128,
+        generator_dim=(256, 256),
+        discriminator_dim=(256, 256),
+        generator_lr=2e-4,
+        discriminator_lr=2e-4,
+        batch_size=500,
+        discriminator_steps=1,
+        log_frequency=True,
+        verbose=True,
+        epochs=300,
+        pac=10,
+        device: torch.device | str = "cpu",
+        seed: int = 42,
+        deterministic: bool = True,
+        allow_tf32: bool = False,
+        progress: str = "auto",
+        progress_label: str = "CTGAN",
+        dequantize_integer_features: bool = False,
+        dequantization_half_width: float = 0.5,
+        dequantization_modal_values=None,
+        **unused,
+    ):
+        if batch_size % pac:
+            raise ValueError("CTGAN batch_size must be divisible by pac")
+        self.categorical_columns = list(categorical_columns)
+        if not isinstance(dequantize_integer_features, bool):
+            raise ValueError("dequantize_integer_features must be true or false")
+        self.dequantize_integer_features = dequantize_integer_features
+        self.dequantization_half_width = float(dequantization_half_width)
+        self.dequantization_modal_values = dict(dequantization_modal_values or {})
+        if (
+            not np.isfinite(self.dequantization_half_width)
+            or not 0.0 < self.dequantization_half_width <= 0.5
+        ):
+            raise ValueError("dequantization_half_width must be in (0, 0.5]")
+        self.device = torch.device(device)
+        self.seed = int(seed)
+        self.deterministic = bool(deterministic)
+        self.allow_tf32 = bool(allow_tf32)
+        self.progress = progress
+        self.progress_label = progress_label
+        self.model_kwargs = {
+            "embedding_dim": int(embedding_dim),
+            "generator_dim": tuple(generator_dim),
+            "discriminator_dim": tuple(discriminator_dim),
+            "generator_lr": float(generator_lr),
+            "discriminator_lr": float(discriminator_lr),
+            "batch_size": int(batch_size),
+            "discriminator_steps": int(discriminator_steps),
+            "log_frequency": bool(log_frequency),
+            "verbose": bool(verbose and progress != "off"),
+            "epochs": int(epochs),
+            "pac": int(pac),
+            "enable_gpu": self.device.type == "cuda",
+        }
+        self.columns = None
+        self.dtypes = None
+        self.decimals = {}
+        self.numeric_constraints = {}
+        self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
+        self.dequantization_diagnostics: Dict[str, Any] = {
+            "enabled": False,
+            "columns": {},
+        }
+        self.model = None
+        self.training_history = pd.DataFrame()
+        self.mixture_diagnostics = []
+        self.convergence_warnings = []
+        self._sample_calls = 0
+
+    def fit(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise ValueError("Cannot fit CTGAN on an empty dataframe")
+        try:
+            from ctgan import CTGAN
+        except ImportError as exc:
+            raise ImportError("CTGAN requires ctgan==0.12.1; rerun setup_env.sh") from exc
+        seed_everything(self.seed, self.deterministic, self.allow_tf32)
+        train_df = df.copy(deep=True).reset_index(drop=True)
+        self.columns = train_df.columns.tolist()
+        self.dtypes = train_df.dtypes.to_dict()
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
+        if self.dequantize_integer_features:
+            train_df, self.dequantization_diagnostics = _dequantize_integer_features(
+                train_df,
+                self.numeric_constraints,
+                categorical_columns=self.categorical_columns,
+                mixed_columns=self.dequantization_modal_values,
+                seed=self.seed,
+                half_width=self.dequantization_half_width,
+            )
+        self.model = CTGAN(**self.model_kwargs)
+        self.model.set_device(str(self.device))
+        self._sample_calls = 0
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ConvergenceWarning)
+            self.model.fit(train_df, discrete_columns=self.categorical_columns)
+        self.convergence_warnings = [
+            str(item.message) for item in caught if issubclass(item.category, ConvergenceWarning)
+        ]
+        losses = getattr(self.model, "loss_values", None)
+        if isinstance(losses, pd.DataFrame):
+            self.training_history = losses.copy()
+
+    def sample(self, n: int) -> pd.DataFrame:
+        if self.model is None or self.columns is None:
+            raise RuntimeError("fit() must be called before sample()")
+        if n < 0:
+            raise ValueError("n must be non-negative")
+        if n == 0:
+            return pd.DataFrame(columns=self.columns)
+        seed_everything(self.seed + self._sample_calls, self.deterministic, self.allow_tf32)
+        self._sample_calls += 1
+        result = self.model.sample(n)
+        self.last_raw_sample = result.copy(deep=True)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
+        result = _restore_schema(result, self.columns, self.dtypes)
+        if len(result) != n:
+            raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
+        return result
+
+    def save_checkpoint(self, path: Path) -> None:
+        self.model.save(str(path))
+
+
+class DPCGANAdapter(GeneratorAdapter):
+    """Adapter for the ``dp-cgans`` 0.2.0 architecture in non-private mode.
+
+    The backend name is retained for registry/configuration compatibility, but
+    this experiment intentionally disables the upstream privacy mechanism so
+    it is a model-quality baseline rather than a differential-privacy claim.
+    """
+
+    def __init__(
+        self,
+        *,
+        categorical_columns,
+        generator_dim=(128, 128, 128),
+        discriminator_dim=(128, 128, 128),
+        generator_lr=2e-4,
+        discriminator_lr=2e-4,
+        batch_size=500,
+        discriminator_steps=10,
+        log_frequency=True,
+        verbose=True,
+        epochs=100,
+        pac=10,
+        private=False,
+        saved_transformer=None,
+        device: torch.device | str = "cpu",
+        seed: int = 42,
+        deterministic: bool = True,
+        allow_tf32: bool = False,
+        progress: str = "auto",
+        progress_label: str = "DP-CGAN",
+        work_dir: Path | str | None = None,
+        dequantize_integer_features: bool = False,
+        dequantization_half_width: float = 0.5,
+        dequantization_modal_values=None,
+        **unused,
+    ):
+        if private is not False:
+            raise ValueError(
+                "dp_cgan is configured as a non-private baseline; set private=false"
+            )
+        if batch_size % pac:
+            raise ValueError("DP-CGAN batch_size must be divisible by pac")
+        self.categorical_columns = list(categorical_columns)
+        if not isinstance(dequantize_integer_features, bool):
+            raise ValueError("dequantize_integer_features must be true or false")
+        self.dequantize_integer_features = dequantize_integer_features
+        self.dequantization_half_width = float(dequantization_half_width)
+        self.dequantization_modal_values = dict(dequantization_modal_values or {})
+        if (
+            not np.isfinite(self.dequantization_half_width)
+            or not 0.0 < self.dequantization_half_width <= 0.5
+        ):
+            raise ValueError("dequantization_half_width must be in (0, 0.5]")
+        self.device = torch.device(device)
+        self.seed = int(seed)
+        self.deterministic = bool(deterministic)
+        self.allow_tf32 = bool(allow_tf32)
+        self.progress = progress
+        self.progress_label = progress_label
+        self.work_dir = Path(work_dir or f"dp_cgan_seed_{seed}").resolve()
+        self.saved_transformer_path = (
+            Path(saved_transformer).expanduser().resolve()
+            if saved_transformer is not None
+            else None
+        )
+        if (
+            self.saved_transformer_path is not None
+            and not self.saved_transformer_path.is_file()
+        ):
+            raise FileNotFoundError(
+                "Configured DP-CGAN transformer does not exist: "
+                f"{self.saved_transformer_path}"
+            )
+        self.transformer_reused = self.saved_transformer_path is not None
+        self.model_kwargs = {
+            "generator_dim": tuple(generator_dim),
+            "discriminator_dim": tuple(discriminator_dim),
+            "generator_lr": float(generator_lr),
+            "discriminator_lr": float(discriminator_lr),
+            "batch_size": int(batch_size),
+            "discriminator_steps": int(discriminator_steps),
+            "log_frequency": bool(log_frequency),
+            "verbose": bool(verbose and progress != "off"),
+            "epochs": int(epochs),
+            "pac": int(pac),
+            "private": False,
+            "saved_transformer": (
+                str(self.saved_transformer_path)
+                if self.saved_transformer_path is not None
+                else None
+            ),
+            "cuda": str(self.device) if self.device.type == "cuda" else False,
+        }
+        self.columns = None
+        self.dtypes = None
+        self.decimals = {}
+        self.numeric_constraints = {}
+        self.last_raw_sample = None
+        self.last_postprocessing_diagnostics = {}
+        self.dequantization_diagnostics: Dict[str, Any] = {
+            "enabled": False,
+            "columns": {},
+        }
+        self.model = None
+        self.training_history = pd.DataFrame()
+        self.mixture_diagnostics = []
+        self.convergence_warnings = []
+        self.upstream_stdout = ""
+        self.differential_privacy_enabled = False
+        self.backend_mode = "non_private_baseline"
+        self._sample_calls = 0
+
+    def fit(self, df: pd.DataFrame) -> None:
+        if df.empty:
+            raise ValueError("Cannot fit DP-CGAN on an empty dataframe")
+        try:
+            from dp_cgans import DP_CGAN
+        except ImportError as exc:
+            raise ImportError("DP-CGAN requires dp-cgans==0.2.0; rerun setup_env.sh") from exc
+        seed_everything(self.seed, self.deterministic, self.allow_tf32)
+        train_df = df.copy(deep=True).reset_index(drop=True)
+        self.columns = train_df.columns.tolist()
+        self.dtypes = train_df.dtypes.to_dict()
+        self.numeric_constraints = _infer_numeric_constraints(train_df)
+        self.decimals = {
+            column: constraint["decimals"]
+            for column, constraint in self.numeric_constraints.items()
+        }
+        if self.dequantize_integer_features:
+            train_df, self.dequantization_diagnostics = _dequantize_integer_features(
+                train_df,
+                self.numeric_constraints,
+                categorical_columns=self.categorical_columns,
+                mixed_columns=self.dequantization_modal_values,
+                seed=self.seed,
+                half_width=self.dequantization_half_width,
+            )
+        for column in self.categorical_columns:
+            train_df[column] = train_df[column].astype("object")
+        self.model = DP_CGAN(**self.model_kwargs)
+        self._sample_calls = 0
+        tee = _Tee(sys.stdout)
+        with _working_directory(self.work_dir), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ConvergenceWarning)
+            with redirect_stdout(tee):
+                self.model.fit(train_df)
+        self.upstream_stdout = tee.text
+        self.convergence_warnings = [
+            str(item.message) for item in caught if issubclass(item.category, ConvergenceWarning)
+        ]
+        loss_files = sorted(self.work_dir.glob("*loss*.csv"))
+        if loss_files:
+            try:
+                self.training_history = pd.read_csv(loss_files[-1])
+            except Exception:
+                self.training_history = pd.DataFrame()
+
+    def sample(self, n: int) -> pd.DataFrame:
+        if self.model is None or self.columns is None:
+            raise RuntimeError("fit() must be called before sample()")
+        if n < 0:
+            raise ValueError("n must be non-negative")
+        if n == 0:
+            return pd.DataFrame(columns=self.columns)
+        seed_everything(self.seed + self._sample_calls, self.deterministic, self.allow_tf32)
+        self._sample_calls += 1
+        with _working_directory(self.work_dir):
+            result = self.model.sample(n)
+        self.last_raw_sample = result.copy(deep=True)
+        result, self.last_postprocessing_diagnostics = _apply_numeric_constraints(
+            result, self.numeric_constraints
+        )
+        result = _restore_schema(result, self.columns, self.dtypes)
+        if len(result) != n:
+            raise RuntimeError(f"Generator returned {len(result)} rows; expected {n}")
+        return result
+
+    def save_checkpoint(self, path: Path) -> None:
+        self.model.save(str(path))
+
+
+GENERATOR_NAMES = ("ctabgan_plus", "ctgan", "dp_cgan")
+
+
+def create_generator(
+    name: str,
+    config: Mapping[str, Any],
+    *,
+    device: torch.device | str,
+    seed: int,
+    deterministic: bool = True,
+    allow_tf32: bool = False,
+    progress: str = "auto",
+    progress_label: str | None = None,
+    work_dir: Path | None = None,
+) -> GeneratorAdapter:
+    """Construct a fresh model adapter without importing unused backends."""
+    normalized = name.strip().lower()
+    if normalized not in GENERATOR_NAMES:
+        raise ValueError(f"Unknown generator '{name}'; choose from {GENERATOR_NAMES}")
+    classes = {
+        "ctabgan_plus": CTABGANPlusAdapter,
+        "ctgan": CTGANAdapter,
+        "dp_cgan": DPCGANAdapter,
+    }
+    kwargs = dict(config)
+    common = {
+        "device": device,
+        "seed": seed,
+        "deterministic": deterministic,
+        "allow_tf32": allow_tf32,
+        "progress": progress,
+        "progress_label": progress_label or normalized,
+    }
+    if normalized == "dp_cgan":
+        common["work_dir"] = work_dir
+    return classes[normalized](**kwargs, **common)

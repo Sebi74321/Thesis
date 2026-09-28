@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=thesis-xai-ablation
+#SBATCH --gres=gpu:h100:1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --output=slurm-%x-%j.out
+
+set -Eeuo pipefail
+cd "${SLURM_SUBMIT_DIR:?Submit this script from the repository root}"
+source setup_env.sh cuda
+cd CTAB-GAN-Plus-main
+CONFIG="${CONFIG:-configs/mimic_ctabgan.json}"
+python -m xai_reweighting.run_ablation \
+  --config "$CONFIG" \
+  --stage val \
+  --device cuda
